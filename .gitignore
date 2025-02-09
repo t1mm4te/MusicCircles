@@ -175,3 +175,7 @@ cython_debug/
 config
 downloads
 trash.py
+conversationbot.py
+conversationbot2.py
+inlinekeyboard2.py
+nestedconversationbot.py

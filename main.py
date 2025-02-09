@@ -13,6 +13,7 @@ from telegram.ext import (
     filters,
 )
 
+# Загрузка переменных окружения
 load_dotenv("config/config.env")
 
 TB_TOKEN = os.getenv("TB_TOKEN")
@@ -27,12 +28,18 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-START, WAITING_FOR_AUDIO, PRINTING_TIME_CODE_TEXT, WAITING_FOR_TIME_CODE_OPTION, WAITING_FOR_CUSTOM_TIME_CODE, OUTPUT, \
-    MP3_FILE_PATH, FILE_DURATION, \
-    DURATION_START, DURATION_CUSTOM, DURATION_LEFT_BORDER, DURATION_RIGHT_BORDER = map(chr, range(12))
+# Константы для работы бота
+(
+    CHOOSING_OPTIONS, SELECTING_ACTION, INPUT_TIME_CODE,  # states
+    MP3_FILE_PATH, FILE_DURATION, DURATION_LEFT_BORDER, DURATION_RIGHT_BORDER,  # user_data
+    DURATION_START, DURATION_CUSTOM, SET_TIME_CODE, BACK_TO_MENU, CREATE_VIDEO_MESSAGE  # callback_queries
+) = map(chr, range(12))
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Печатает приветственное сообщение
+    """
     user = update.message.from_user
     logger.info(f"{user.id} started bot")
 
@@ -41,21 +48,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         "Пришли мне файл с твоей песней или голосовое сообщение"
     )
 
-    return WAITING_FOR_AUDIO
+
+def get_main_menu(context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
+    """
+    Возвращает основное меню.
+    :param context: Контекст для получения уже установленных настроек.
+    :return: Разметка клавиатуры, являющейся меню.
+    """
+    user_data = context.user_data
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(f"⏱️Редактировать время: с {user_data[DURATION_LEFT_BORDER]}с по {user_data[DURATION_RIGHT_BORDER]}с", callback_data=SET_TIME_CODE), ],
+            [InlineKeyboardButton("▶️Создать кружок", callback_data=CREATE_VIDEO_MESSAGE), ],
+        ]
+    )
+
+    return keyboard
 
 
-def get_file_name_extension(mime: str) -> str:
-    match mime:
-        case "audio/mpeg":
-            return ".mp3"
-        case "audio/ogg":
-            return ".ogg"
-        case "audio/x-wav":
-            return ".wav"
-
-
+# ENTRY_POINT
 async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | None:
-    """Проверка аудио и запоминание file_id."""
+    """
+    Проверка аудио и запоминание file_id.
+    Показ меню для выбора опций.
+    """
     message = update.message
 
     # Проверяем, что пришел именно аудиофайл
@@ -64,11 +81,11 @@ async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str 
         await message.reply_text("Отправьте аудиофайл (MP3, OGG, WAV).")
         return
     print(audio)
+
     # Получаем информацию о файле
     file_id = audio.file_id
     file_size = audio.file_size  # Размер в байтах
     mime_type = audio.mime_type  # MIME-тип, например 'audio/mpeg' для mp3 и 'audio/ogg' для голосовых
-    # file_name = getattr(audio, "file_name", "audio_file")  # Имя файла (если есть)
 
     # Ограничения по размеру (например, 6MB)
     max_file_size = 6 * 1024 * 1024  # 6 MB
@@ -82,7 +99,10 @@ async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str 
         await message.reply_text("Неподдерживаемый формат! Используйте MP3, OGG, WAV.")
         return
 
-    context.user_data[FILE_DURATION] = audio.duration
+    user_data = context.user_data
+
+    file_duration = audio.duration
+    user_data[FILE_DURATION] = str(file_duration)
 
     file_name_extension = get_file_name_extension(mime_type)
     file_name = file_id + file_name_extension
@@ -90,68 +110,98 @@ async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str 
     # Скачиваем файл
     file = await context.bot.get_file(file_id)
 
-    file_path = os.path.join(DOWNLOAD_FOLDER, f"{file_name}")  # Сохраняем как MP3
+    file_path = os.path.join(DOWNLOAD_FOLDER, f"{file_name}")
     print(file_path)
-    context.user_data[MP3_FILE_PATH] = file_path
+    user_data[MP3_FILE_PATH] = file_path
     os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
     await file.download_to_drive(file_path)
 
-    logger.info(f"Файл сохранён: {file_path}")
+    logger.info(f"Файл сохранён: Размер - {file_size} Путь - {file_path}")
 
-    # Читаем и обрезаем аудиофайл (например, первые 10 секунд)
-    # trimmed_path = file_path.replace(".mp3", "_trimmed.mp3")
-    # audio_segment = AudioSegment.from_file(file_path)
-    # trimmed_audio = audio_segment[:10_000]  # 10 секунд (в миллисекундах)
-    # trimmed_audio.export(trimmed_path, format="mp3")
-    #
-    # logger.info(f"Обрезанный файл сохранён: {trimmed_path}")
     await message.reply_text("Файл загружен!")
-    print(context.user_data[MP3_FILE_PATH], type(context.user_data[MP3_FILE_PATH]))
-    print(context.user_data[FILE_DURATION], type(context.user_data[FILE_DURATION]))
 
-    await print_time_codes(update, context)
+    # настройки по умолчанию, после вынести в отдельный метод
+    user_data[DURATION_LEFT_BORDER] = str(0)
+    user_data[DURATION_RIGHT_BORDER] = str(min(60, file_duration))
 
-    return WAITING_FOR_TIME_CODE_OPTION
+    keyboard = get_main_menu(context)
+
+    await message.reply_text("Выберите опцию:", reply_markup=keyboard)
+
+    return CHOOSING_OPTIONS
 
 
+def get_file_name_extension(mime: str) -> str:
+    """
+    Возвращает тип файла исходя из MIME-типов.
+    :param mime: MIME-тип.
+    :return: Расширение имени файла.
+    """
+    match mime:
+        case "audio/mpeg":
+            return ".mp3"
+        case "audio/ogg":
+            return ".ogg"
+        case "audio/x-wav":
+            return ".wav"
+
+
+# ENTRY POINT
 async def print_time_codes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Показывает меню для установки времени.
+    """
+    query = update.callback_query
+    await query.answer()
+
     keyboard = [
         [
             InlineKeyboardButton("⭐️С начала", callback_data=DURATION_START),
             InlineKeyboardButton("Ввести время самому", callback_data=DURATION_CUSTOM),
-        ]
+        ],
+        [
+            InlineKeyboardButton("Назад", callback_data=BACK_TO_MENU),
+        ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     audio_duration = context.user_data[FILE_DURATION]
-    await update.message.reply_text(f"Теперь давай обрежем твой аудиофайл как надо!\n"
-                                    f"Его длительность {audio_duration}. "
-                                    "Максимальная длина кружочка - 1 минута. "
-                                    "Можем начать с начала или выбрать особый отрезок песни.",
-                                    reply_markup=reply_markup)
+
+    await query.edit_message_text(
+        f"Теперь давай обрежем твой аудиофайл как надо!\n"
+        f"Его длительность {audio_duration}с. "
+        "Максимальная длина кружочка - 1 минута. "
+        "Можем начать с начала или выбрать особый отрезок песни.",
+        reply_markup=reply_markup
+    )
+
+    return SELECTING_ACTION
 
 
-# WAITING_FOR_TIME_CODE_OPTION
+# SELECTING_ACTION
 async def set_start_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Устанавливает время по умолчанию - с начала.
+    """
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("✅Будем отсчитывать сначала")
 
     context.user_data[DURATION_LEFT_BORDER] = str(0)
     context.user_data[DURATION_RIGHT_BORDER] = str(min(60, int(context.user_data[FILE_DURATION])))
 
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    keyboard = get_main_menu(context)
 
-    await trim_audio(update, context)
-    await show_data(update, context)
+    await query.edit_message_text("✅Будем отсчитывать сначала.\nВыберите опцию:", reply_markup=keyboard)
+
     return ConversationHandler.END
 
 
-# WAITING_FOR_TIME_CODE_OPTION
+# SELECTING_ACTION
 async def print_custom_time_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+    """
+    Печатает текст для установки собственного времени.
+    """
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
@@ -159,88 +209,158 @@ async def print_custom_time_text(update: Update, context: ContextTypes.DEFAULT_T
         "или мм:сс мм:сс или сс сс для обозначения интервалов (через пробел)."
     )
 
-    return WAITING_FOR_CUSTOM_TIME_CODE
+    return INPUT_TIME_CODE
 
 
-# WAITING_FOR_CUSTOM_TIME_CODE
+# INPUT_TIME_CODE
 async def set_custom_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Принимает сообщение с указанием времени, запоминает его и возвращает меню.
+    """
     text = update.message.text
     time_codes = tuple(map(get_seconds, text.split()))
 
-    context.user_data[DURATION_LEFT_BORDER] = str(time_codes[0])    # добавить обработчик значений
+    user_data = context.user_data
+
+    user_data[DURATION_LEFT_BORDER] = str(time_codes[0])  # добавить обработчик значений
 
     if len(time_codes) == 2:
-        context.user_data[DURATION_RIGHT_BORDER] = str(time_codes[1])
+        user_data[DURATION_RIGHT_BORDER] = str(time_codes[1])
     else:
-        context.user_data[DURATION_RIGHT_BORDER] = str(time_codes[0] + 60)
+        user_data[DURATION_RIGHT_BORDER] = str(min(time_codes[0] + 60, int(user_data[FILE_DURATION])))
+
+    keyboard = get_main_menu(context)
 
     await update.message.reply_text(
         f"✅Возьмем аудио с {context.user_data[DURATION_LEFT_BORDER]}с по {context.user_data[DURATION_RIGHT_BORDER]}с."
+        f"\nВыберите опцию:",
+        reply_markup=keyboard
     )
-    await trim_audio(update, context)
-    await show_data(update, context)
+
     return ConversationHandler.END
 
 
 def get_seconds(time: str) -> int:
+    """
+    Получение секунд из строки, являющейся временем.
+    :param time: Время в виде mm:ss или ss.
+    :return: Время в секундах.
+    """
     if ":" in time:
         m, s = map(int, time.split(":"))
         return m * 60 + s
     return int(time)
 
 
-async def trim_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_data = context.user_data
-    await update.message.reply_text(
-        f"⚙️Обрезаю аудио с {user_data[DURATION_LEFT_BORDER]}с по {user_data[DURATION_RIGHT_BORDER]}с."
+# SELECTING_ACTION
+async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Возвращает меню.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = get_main_menu(context)
+
+    await query.edit_message_text(
+        "Выберите опцию:",
+        reply_markup=keyboard
     )
-
-
-async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Вывод информации")
 
     return ConversationHandler.END
 
 
-async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Display the gathered info and end the conversation."""
+# CHOOSING_OPTIONS
+async def create_video_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Создает видео сообщение из ранее полученных данных.
+    """
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Хорошо, создаю кружок")
+
+    return ConversationHandler.END
+
+
+async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда для остановки бота, вызов clear.
+    """
+    pass
+
+
+def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Удаляет загруженный файл, очищает user_data.
+    """
+
+    if update.message:
+        user_info = f"{update.message.from_user.id} - {update.message.from_user.username}"
+    else:
+        user_info = f"{update.callback_query.from_user.id} - {update.callback_query.from_user.username}"
+
     user_data = context.user_data
 
-    await update.message.reply_text(
-        f"fallbacks",
-    )
+    if user_data.get(MP3_FILE_PATH):
+        path = user_data[MP3_FILE_PATH]
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info(f"{user_info}: File {path} has been deleted.")
+        else:
+            logger.info(f"{user_info}: File {path} has already been deleted.")
 
     user_data.clear()
-    return ConversationHandler.END
+
+    logger.info(f"{user_info}: user_data has been cleared")
 
 
 def main() -> None:
     application = Application.builder().token(TB_TOKEN).build()
 
-    # audio_handler = MessageHandler(filters.AUDIO | filters.VOICE, save_audio)
-    # time_code_handler = MessageHandler(filters.Regex(
-    #     "^(\d{1,2}:\d{1,2}( \d{1,2}:\d{1,2})?|\d{1,2}( \d{1,2})?)$"), trim_audio)
+    start_handler = CommandHandler("start", start)
 
-    # application.add_handler(audio_handler)
-    # application.add_handler(time_code_handler)
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+    time_conv_handler = ConversationHandler(
+        # функция должна редактировать сообщение
+        # клавиатура с выбором времени сначала, кастом и "назад"
+        # return
+        entry_points=[CallbackQueryHandler(print_time_codes, pattern="^" + str(SET_TIME_CODE) + "$")],
         states={
-            WAITING_FOR_AUDIO: [
-                MessageHandler(filters.AUDIO | filters.VOICE, save_audio),
-            ],
-            WAITING_FOR_TIME_CODE_OPTION: [
+            SELECTING_ACTION: [
+                # после выполнения ConversationHandler.END
                 CallbackQueryHandler(set_start_time, pattern="^" + str(DURATION_START) + "$"),
+                # после выполнения INPUT_TIME_CODE
                 CallbackQueryHandler(print_custom_time_text, pattern="^" + str(DURATION_CUSTOM) + "$"),
+                # после выполнения ConversationHandler.END
+                CallbackQueryHandler(back_to_menu, pattern="^" + str(BACK_TO_MENU) + "$"),
             ],
-            WAITING_FOR_CUSTOM_TIME_CODE: [
-                MessageHandler(filters.TEXT, set_custom_time),
+            INPUT_TIME_CODE: [
+                # после выполнения ConversationHandler.END
+                MessageHandler(filters.Regex(
+                    r"^(\d{1,2}:\d{1,2}( \d{1,2}:\d{1,2})?|\d{1,2}( \d{1,2})?)$"), set_custom_time),
             ],
         },
+        fallbacks=[],
+        map_to_parent={
+            ConversationHandler.END: CHOOSING_OPTIONS,
+        }
+    )
+
+    conv_handler = ConversationHandler(
+        # принимает аудио и выводит кнопки для выбора опций
+        entry_points=[MessageHandler(filters.AUDIO | filters.VOICE, save_audio)],
+        states={
+            CHOOSING_OPTIONS: [
+                # handler, который обрабатывает с отрезок аудио,
+                time_conv_handler,
+                # handler, который начинает создавать кружок
+                CallbackQueryHandler(create_video_message, pattern="^" + str(CREATE_VIDEO_MESSAGE) + "$"),
+            ],
+        },
+        # пустышка, необходимо сделать так, что бы метод оставнавливал работу и чистил память
         fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
     )
 
+    application.add_handler(start_handler)
     application.add_handler(conv_handler)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
