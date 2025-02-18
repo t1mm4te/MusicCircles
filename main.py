@@ -73,6 +73,8 @@ async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str 
     Проверка аудио и запоминание file_id.
     Показ меню для выбора опций.
     """
+    clear(update, context)
+
     message = update.message
 
     # Проверяем, что пришел именно аудиофайл
@@ -80,7 +82,6 @@ async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str 
     if not audio:
         await message.reply_text("Отправьте аудиофайл (MP3, OGG, WAV).")
         return
-    print(audio)
 
     # Получаем информацию о файле
     file_id = audio.file_id
@@ -111,7 +112,6 @@ async def save_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str 
     file = await context.bot.get_file(file_id)
 
     file_path = os.path.join(DOWNLOAD_FOLDER, f"{file_name}")
-    print(file_path)
     user_data[MP3_FILE_PATH] = file_path
     os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -279,6 +279,7 @@ async def create_video_message(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     await query.edit_message_text("Хорошо, создаю кружок")
 
+    clear(update, context)
     return ConversationHandler.END
 
 
@@ -305,9 +306,9 @@ def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         path = user_data[MP3_FILE_PATH]
         if os.path.exists(path):
             os.remove(path)
-            logger.info(f"{user_info}: File {path} has been deleted.")
+            logger.info(f"{user_info}: File {path} has been deleted")
         else:
-            logger.info(f"{user_info}: File {path} has already been deleted.")
+            logger.info(f"{user_info}: File {path} has already been deleted")
 
     user_data.clear()
 
