@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 # Загрузка переменных окружения
-load_dotenv("config/config.env")
+load_dotenv(".env")
 
 TB_TOKEN = os.getenv("TB_TOKEN")
 DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER")
