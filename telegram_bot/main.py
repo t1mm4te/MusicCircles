@@ -10,24 +10,10 @@ from telegram.ext import (
     filters,
 )
 
-from src.states import (
-    CHOOSING_OPTIONS, SELECTING_ACTION, INPUT_TIME_CODE,    # states
-    DURATION_START, DURATION_CUSTOM, SET_TIME_CODE,         # callback_queries
-    BACK_TO_MENU, CREATE_VIDEO_MESSAGE
-)
+import src.states as st
 
 from src.config import TB_TOKEN
-from src.handlers import (
-    start,
-    save_audio,
-    print_time_codes,
-    set_start_time,
-    print_custom_time_text,
-    set_custom_time,
-    back_to_menu,
-    create_video_message,
-    done,
-)
+import src.handlers as hnd
 
 
 # Enable logging
@@ -47,60 +33,83 @@ def main() -> None:
 
     application = Application.builder().token(TB_TOKEN).build()
 
-    start_handler = CommandHandler('start', start)
+    start_handler = CommandHandler('start', hnd.start)
 
     time_conv_handler = ConversationHandler(
         # Функция должна редактировать сообщение:
         # клавиатура с выбором времени с начала, кастом и "назад"
         # return.
-        entry_points=[CallbackQueryHandler(
-            print_time_codes, pattern='^' + str(SET_TIME_CODE) + '$')],
+        entry_points=[
+            CallbackQueryHandler(
+                hnd.print_time_codes,
+                pattern='^' + str(st.SET_TIME_CODE) + '$'
+            )
+        ],
         states={
-            SELECTING_ACTION: [
+            st.SELECTING_ACTION: [
                 # После выполнения ConversationHandler.END.
                 CallbackQueryHandler(
-                    set_start_time, pattern='^' + str(DURATION_START) + '$'),
+                    hnd.set_start_time,
+                    pattern='^' + str(st.DURATION_START) + '$'
+                ),
+
                 # После выполнения INPUT_TIME_CODE.
-                CallbackQueryHandler(print_custom_time_text,
-                                     pattern='^' + str(DURATION_CUSTOM) + '$'),
+                CallbackQueryHandler(
+                    hnd.print_custom_time_text,
+                    pattern='^' + str(st.DURATION_CUSTOM) + '$'
+                ),
+
                 # После выполнения ConversationHandler.END.
                 CallbackQueryHandler(
-                    back_to_menu, pattern='^' + str(BACK_TO_MENU) + '$'),
+                    hnd.back_to_menu,
+                    pattern='^' + str(st.BACK_TO_MENU) + '$'
+                ),
             ],
-            INPUT_TIME_CODE: [
+            st.INPUT_TIME_CODE: [
                 # После выполнения ConversationHandler.END.
                 MessageHandler(
                     filters.Regex(
                         r'^(\d{1,2}:\d{1,2}( \d{1,2}:\d{1,2})?|'
                         r'\d{1,2}( \d{1,2})?)$'
                     ),
-                    set_custom_time),
+                    hnd.set_custom_time
+                ),
             ],
         },
         fallbacks=[],
         map_to_parent={
-            ConversationHandler.END: CHOOSING_OPTIONS,
+            ConversationHandler.END: st.CHOOSING_OPTIONS,
         }
     )
 
     conv_handler = ConversationHandler(
         # Принимает аудио и выводит кнопки для выбора опций.
-        entry_points=[MessageHandler(
-            filters.AUDIO | filters.VOICE, save_audio)],
+        entry_points=[
+            MessageHandler(
+                filters.AUDIO | filters.VOICE,
+                hnd.save_audio
+            )
+        ],
         states={
-            CHOOSING_OPTIONS: [
+            st.CHOOSING_OPTIONS: [
                 # Handler, который обрабатывает с отрезок аудио.
                 time_conv_handler,
+
                 # Handler, который начинает создавать кружок.
                 CallbackQueryHandler(
-                    create_video_message,
-                    pattern='^' + str(CREATE_VIDEO_MESSAGE) + '$'
+                    hnd.create_video_message,
+                    pattern='^' + str(st.CREATE_VIDEO_MESSAGE) + '$'
                 ),
             ],
         },
         # Пустышка, необходимо сделать так,
         # что бы метод оставнавливал работу и чистил память.
-        fallbacks=[MessageHandler(filters.Regex('^Done$'), done)],
+        fallbacks=[
+            MessageHandler(
+                filters.Regex('^Done$'),
+                hnd.done
+            )
+        ],
     )
 
     application.add_handler(start_handler)
