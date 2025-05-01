@@ -2,6 +2,7 @@ import logging
 import os
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -328,10 +329,59 @@ async def create_video_message(update: Update,
     Создает видео сообщение из ранее полученных данных.
     """
     assert update.callback_query is not None
+    assert update.effective_chat is not None
 
     query = update.callback_query
     await query.answer()
     await query.edit_message_text('Хорошо, создаю кружок')
+
+    bot = context.bot
+    chat_id = update.effective_chat.id
+
+    VIDEO_NOTE_PATH = 'your_path'
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(VIDEO_NOTE_PATH):
+        logger.error(f'Файл видео не найден по пути: {VIDEO_NOTE_PATH}')
+        await query.edit_message_text(
+            'Ошибка, не могу создать кружок 😢'
+        )
+        return ConversationHandler.END
+
+    try:
+        logger.info(f'Попытка отправить видео-кружок в chat_id: {chat_id}')
+
+        # Открываем файл в бинарном режиме для чтения ('rb')
+        with open(VIDEO_NOTE_PATH, 'rb') as video_file:
+            await bot.send_video_note(
+                chat_id=chat_id,
+                video_note=video_file,
+            )
+
+        logger.info('Видео-кружок успешно отправлен!')
+
+    # Обработка специфичных ошибок Telegram
+    except BadRequest as e:
+        logger.error(f'Ошибка Telegram (BadRequest): {e}')
+        error_message = f'Не удалось отправить видео-кружок: {e.message}'
+
+        if ('wrong file identifier' in str(e).lower()
+                or 'can\'t parse url' in str(e).lower()):
+            error_message += ('\nВозможно, неверный формат файла,'
+                              'URL или file_id.')
+        elif 'chat not found' in str(e).lower():
+            error_message += ('\nПроверьте правильность'
+                              f'TARGET_CHAT_ID ({chat_id}).')
+        elif 'VIDEO_NOTE_DIMENSIONS_INVALID' in str(e):
+            error_message += '\nВидео должно быть квадратным.'
+
+        logger.error(error_message)
+
+    except TelegramError as e:
+        logger.error(f'Общая ошибка Telegram: {e}')
+
+    except Exception as e:
+        logger.error(f'Неожиданная ошибка: {e}')
 
     clear(update, context)
     return ConversationHandler.END
