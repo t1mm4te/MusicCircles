@@ -1,18 +1,74 @@
 from audio_receiver_utils import *
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response, StreamingResponse
+from typing import Optional
+
+app = FastAPI(title="Yandex Music API Wrapper")
 
 
-if __name__ == '__main__':
-    print("Hello world! It's yandex_music_utils test")
-    bad_request = 'afafadfdfa21424easdf'
-    good_request = 'booker по шаблону'
-    searched_track = find_tracks_by_name(bad_request)
-    if searched_track is None:
-        print(f'track {bad_request} is not found')
-    searched_track = find_tracks_by_name(good_request)[0]
-    cover = get_track_cover(searched_track)
-    track = get_track(searched_track)
+@app.get("/search/")
+async def search_tracks(query: str, limit: Optional[int] = 5):
+    """
+    Поиск треков по названию
+    """
+    try:
+        tracks = find_tracks_by_name(query)
+        if not tracks:
+            raise HTTPException(status_code=404, detail="Треки не найдены")
 
-    with open('audiotrack1.mp3', 'wb') as track_file, open('cover1.png', 'wb') as cover_file:
-        cover_file.write(cover)
-        track_file.write(track)
-    print('Test is end, check files')
+        result = []
+        for track in tracks[:limit]:
+            result.append({
+                "id": track.id,
+                "title": track.title,
+                "artists": [artist.name for artist in track.artists],
+                "duration": track.duration_ms
+                # noqa
+            })
+
+        return {"results": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/track/{track_id}/cover")
+async def get_track_cover_image(track_id: str):
+    """
+    Получение обложки трека
+    """
+    try:
+        track = client.tracks(track_id)[0]
+        cover_bytes = get_track_cover(track)
+        if not cover_bytes:
+            raise HTTPException(status_code=404, detail="Обложка не найдена")
+
+        return Response(content=cover_bytes, media_type="image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/track/{track_id}/stream")
+async def stream_track(track_id: str):
+    """
+    Потоковое воспроизведение трека
+    """
+    try:
+        track = client.tracks(track_id)[0]
+        track_bytes = get_track(track)
+        if not track_bytes:
+            raise HTTPException(status_code=404, detail="Трек не найден")
+
+        return StreamingResponse(
+            iter([track_bytes]),
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": f"inline; filename={track.title}.mp3",
+                "Content-Length": str(len(track_bytes))
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=9000)
