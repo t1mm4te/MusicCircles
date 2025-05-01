@@ -26,7 +26,3 @@ def get_track(track: Track):
     download_info = download_info[0]
     track_source = track.download_bytes(download_info['codec'], download_info['bitrate_in_kbps'])
     return track_source
-
-
-if __name__ == "__main__":
-    print(find_tracks_by_name('boring people'))
