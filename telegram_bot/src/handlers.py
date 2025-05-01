@@ -340,7 +340,6 @@ async def create_video_message(update: Update,
 
     VIDEO_NOTE_PATH = 'your_path'
 
-    # Проверяем, существует ли файл
     if not os.path.exists(VIDEO_NOTE_PATH):
         logger.error(f'Файл видео не найден по пути: {VIDEO_NOTE_PATH}')
         await query.edit_message_text(
@@ -360,17 +359,16 @@ async def create_video_message(update: Update,
 
         logger.info('Видео-кружок успешно отправлен!')
 
-    # Обработка специфичных ошибок Telegram
     except BadRequest as e:
         logger.error(f'Ошибка Telegram (BadRequest): {e}')
         error_message = f'Не удалось отправить видео-кружок: {e.message}'
 
         if ('wrong file identifier' in str(e).lower()
                 or 'can\'t parse url' in str(e).lower()):
-            error_message += ('\nВозможно, неверный формат файла,'
+            error_message += ('\nВозможно, неверный формат файла, '
                               'URL или file_id.')
         elif 'chat not found' in str(e).lower():
-            error_message += ('\nПроверьте правильность'
+            error_message += ('\nПроверьте правильность '
                               f'TARGET_CHAT_ID ({chat_id}).')
         elif 'VIDEO_NOTE_DIMENSIONS_INVALID' in str(e):
             error_message += '\nВидео должно быть квадратным.'
