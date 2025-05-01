@@ -1,8 +1,9 @@
 # Константы для работы бота
 (
     CHOOSING_OPTIONS, SELECTING_ACTION, INPUT_TIME_CODE,    # states
+    SELECTING_SONG,
     MP3_FILE_PATH, FILE_DURATION, DURATION_LEFT_BORDER,     # user_data
     DURATION_RIGHT_BORDER,
     DURATION_START, DURATION_CUSTOM, SET_TIME_CODE,         # callback_queries
     BACK_TO_MENU, CREATE_VIDEO_MESSAGE
-) = map(chr, range(12))
+) = map(chr, range(13))

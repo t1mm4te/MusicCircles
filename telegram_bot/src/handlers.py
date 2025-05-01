@@ -147,6 +147,37 @@ async def save_audio(update: Update,
     return st.CHOOSING_OPTIONS
 
 
+async def search_audio_by_name(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> str | None:
+    """
+    Ищет песню по названию, введенному пользователем,
+    и выдает список возможных вариантов
+    и соответствующие им кнопки для выбора.
+    """
+    assert update.message is not None
+    assert update.message.text is not None
+
+    user_text = update.message.text
+    logger.info(user_text)
+
+    return st.SELECTING_SONG
+
+
+async def save_audio_by_id(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Сохраняет песню по id из callback query."""
+    clear(update, context)
+
+    assert update.callback_query is not None
+
+    query = update.callback_query
+    await query.answer()
+
+    return ConversationHandler.END
+
+
 def get_file_name_extension(mime: str) -> str:
     """
     Возвращает тип файла исходя из MIME-типов.

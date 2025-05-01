@@ -35,10 +35,28 @@ def main() -> None:
 
     start_handler = CommandHandler('start', hnd.start)
 
+    selecting_song_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.TEXT,
+                hnd.search_audio_by_name
+            )
+        ],
+        states={
+            st.SELECTING_SONG: [
+                CallbackQueryHandler(
+                    hnd.save_audio_by_id,
+                    pattern=r'^\d+$'
+                )
+            ]
+        },
+        fallbacks=[],
+        map_to_parent={
+            ConversationHandler.END: st.CHOOSING_OPTIONS,
+        }
+    )
+
     time_conv_handler = ConversationHandler(
-        # Функция должна редактировать сообщение:
-        # клавиатура с выбором времени с начала, кастом и "назад"
-        # return.
         entry_points=[
             CallbackQueryHandler(
                 hnd.print_time_codes,
@@ -83,12 +101,13 @@ def main() -> None:
     )
 
     conv_handler = ConversationHandler(
-        # Принимает аудио и выводит кнопки для выбора опций.
+        # Принимает аудио или название песни и выводит кнопки для выбора опций.
         entry_points=[
             MessageHandler(
                 filters.AUDIO | filters.VOICE,
                 hnd.save_audio
-            )
+            ),
+            selecting_song_conv_handler
         ],
         states={
             st.CHOOSING_OPTIONS: [
