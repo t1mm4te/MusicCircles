@@ -31,6 +31,25 @@ async def search_tracks(query: str, limit: Optional[int] = 5):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/track/{track_id}/info")
+async def track_info(track_id: str):
+    """
+    Получение полной информации о треке по его ID
+    """
+    try:
+        track = get_track_info(track_id)
+        if not track:
+            raise HTTPException(status_code=404, detail="Трек не найден")
+
+        return {
+            "title": track.title,
+            "artists": [{"id": artist.id, "name": artist.name} for artist in track.artists],
+            "duration": track.duration_ms
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/track/{track_id}/cover")
 async def get_track_cover_image(track_id: str):
     """
