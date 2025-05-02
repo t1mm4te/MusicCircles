@@ -1,6 +1,7 @@
 import logging
 import os
 import httpx
+from collections import namedtuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest, TelegramError
@@ -12,6 +13,8 @@ from telegram.ext import (
 import src.states as st
 
 import src.config as conf
+
+import src.api_utils as api_utils
 
 
 logger = logging.getLogger(__name__)
@@ -165,37 +168,18 @@ async def search_audio_by_name(
     url = f'{conf.AUDIO_RECEIVER_API_URL}/search/'
     params = {'query': song_name}
 
-    had_error = False
+    response = await api_utils.get_data_from_api(
+        url=url,
+        params=params
+    )
 
-    data = []
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=10.0)
-            response.raise_for_status()  # Проверяем на ошибки HTTP (4xx, 5xx)
-
-    except httpx.HTTPStatusError as e:
-        logger.error(
-            'Ошибка HTTP при запросе к FastAPI: '
-            f'{e.response.status_code} - {e.response.text}'
-        )
-        had_error = True
-
-    except httpx.RequestError as e:
-        logger.error(f'Ошибка соединения с FastAPI: {e}')
-        had_error = True
-
-    except Exception as e:
-        logger.error(f'Непредвиденная ошибка: {e}')
-        had_error = True
-
-    if had_error:
+    if response.had_error:
         await update.message.reply_text(
             'Произошла ошибка. Попробуйте еще раз позже.'
         )
         return None
 
-    data = response.json().get('results', [])  # Парсим JSON ответ
+    data = response.data.get('results', [])  # Парсим JSON ответ
 
     if not data:
         await update.message.reply_text(
@@ -209,8 +193,11 @@ async def search_audio_by_name(
         id = item.get('id')
         title = item.get('title', 'Без названия')
         artists = ', '.join(item.get('artists', ['Неизвестный']))
-        duration = item.get('duration')
-        text += f'\n {i}) {title} – {artists} ({duration})'
+        duration = item.get('duration') // 1000  # В секундах.
+
+        text += (f'\n {i}) {title} – {artists} '
+                 f'({duration // 60}:{duration % 60})')
+
         inline_keyboards.append(
             InlineKeyboardButton(
                 str(i),
@@ -233,7 +220,7 @@ async def search_audio_by_name(
 
 async def save_audio_by_id(
         update: Update,
-        context: ContextTypes.DEFAULT_TYPE) -> int:
+        context: ContextTypes.DEFAULT_TYPE) -> int | None:
     """Сохраняет песню по id из callback query."""
     clear(update, context)
 
@@ -242,7 +229,45 @@ async def save_audio_by_id(
     query = update.callback_query
     await query.answer()
 
-    logger.info(query.data)
+    assert context.user_data is not None
+
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{query.data}/info'
+
+    response = await api_utils.get_data_from_api(
+        url=url
+    )
+
+    if response.had_error:
+        await query.edit_message_text(
+            'Произошла ошибка. Попробуйте позже.'
+        )
+        return None
+
+    duration = response.data.get('duration')
+
+    assert duration is int
+
+    user_data = context.user_data
+
+    user_data[st.FILE_DURATION] = str(duration)
+    user_data[st.DURATION_LEFT_BORDER] = str(0)
+    user_data[st.DURATION_RIGHT_BORDER] = str(min(60, duration))
+
+    # Get mp3 file.
+
+    id = query.data
+    url = f"{conf.AUDIO_RECEIVER_API_URL}/track/{id}/stream"
+
+    assert id is not None
+    assert conf.DOWNLOAD_FOLDER is not None
+
+    file_path = await api_utils.download_track_stream(
+        url=url,
+        song_id=id,
+        save_dir=conf.DOWNLOAD_FOLDER
+    )
+
+    user_data[st.MP3_FILE_PATH] = file_path
 
     return ConversationHandler.END
 
