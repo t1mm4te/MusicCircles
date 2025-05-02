@@ -118,9 +118,17 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
             video_stream,
             tmp_video_name,
             vcodec='libx264',
-            acodec='aac',
+            # acodec='aac',
+            acodec='copy',
             pix_fmt='yuv420p',
-            shortest=None
+            shortest=None,
+            # Option 2: Explicitly try to shift timestamps
+            copyts=None, # Reset copyts if set earlier
+            start_at_zero=None, # Try adding this
+            vsync='cfr', # Constant frame rate might help sync
+            **{'async': '1',  # Передаем как строку '1'
+               'movflags': '+faststart',
+               }# Another audio sync method, sometimes helps
         )
         try:
             ffmpeg.run(output_stream, capture_stderr=True, quiet=False)
@@ -196,21 +204,19 @@ async def create_video_endpoint(
     return StreamingResponse(io.BytesIO(video_bytes), media_type="video/mp4", headers=headers)
 
 
-def test_crop():
-    filename = "./examples/fire.png"
-    buffer = None
-    with open(filename, "rb") as f:
-        buffer = f.read()
-    print(len(buffer))
-    new_buffer = crop_to_square(io.BytesIO(buffer))
-    with open("./examples/new_fire.png", "wb") as f:
-        f.write(new_buffer.getbuffer())
-    print('ok')
-
-
-
-if __name__ == "__main__":
-    test_crop()
+# def test_crop():
+#    filename = "./examples/fire.png"
+#    buffer = None
+#    with open(filename, "rb") as f:
+#        buffer = f.read()
+#    print(len(buffer))
+#    new_buffer = crop_to_square(io.BytesIO(buffer))
+#    with open("./examples/new_fire.png", "wb") as f:
+#        f.write(new_buffer.getbuffer())
+#    print('ok')
+#
+#if __name__ == "__main__":
+#    test_crop()
 
 
 # Инструкции по запуску FastAPI (для локального тестирования):
