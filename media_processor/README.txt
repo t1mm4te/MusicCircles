@@ -47,4 +47,5 @@ curl -X POST -F "audio_file=@trimmed_audio1.mp3" -F "image_file=@VK logo.png" ht
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-curl -X POST -F "file=@examples/acousitc trash.mp3" -F "start=5" -F "end=10" http://127.0.0.1:8000/trim_audio --output trimmed_audio1.mp3
+curl -X POST -F "file=@examples/acousitc trash.mp3" -F "start=5" -F "end=30" http://127.0.0.1:8000/trim_audio --output examples/trimmed_audio1.mp3
+url -X POST -F "audio_file=@examples/trimmed_audio1.mp3" -F "image_file=@examples/habibi.png" http://127.0.0.1:8000/create_video --output examples/output.mp4

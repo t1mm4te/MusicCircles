@@ -8,8 +8,10 @@ import ffmpeg
 import tempfile
 from typing import BinaryIO
 import uuid
+from PIL import Image
 
 app = FastAPI()
+
 
 async def trim_audio(audio_file: bytes, start_time: int, end_time: int) -> io.BytesIO:
     """
@@ -36,6 +38,40 @@ async def trim_audio(audio_file: bytes, start_time: int, end_time: int) -> io.By
         print(f"Ошибка при обработке аудио: {e}")
         return io.BytesIO()
 
+
+def crop_to_square(image_file: BinaryIO) -> io.BytesIO:
+    """
+    Обрезает изображение до квадратной формы по центру и по меньшей стороне.
+
+    Args:
+        image_file: Байты файла изображения.
+
+    Returns:
+        io.BytesIO: Объект, содержащий обрезанное изображение в формате PNG.
+    """
+    try:
+        img = Image.open(image_file)
+        width, height = img.size
+
+        if width == height:
+            return image_file  # Изображение уже квадратное
+
+        min_side = min(width, height)
+        left = (width - min_side) // 2
+        top = (height - min_side) // 2
+        right = (width + min_side) // 2
+        bottom = (height + min_side) // 2
+
+        cropped_img = img.crop((left, top, right, bottom))
+        output_buffer = io.BytesIO()
+        cropped_img.save(output_buffer, format="PNG")
+        output_buffer.seek(0)
+        return output_buffer
+    except Exception as e:
+        print(f"Ошибка при обработке изображения: {e}")
+        return io.BytesIO()
+
+
 def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: BinaryIO) -> bytes:
     audio_suffix = ".aac"
     audio_converted_suffix = ".aac"
@@ -52,8 +88,9 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
         with open(tmp_audio_name, "wb") as f:
             f.write(audio_file.read())
 
+        cropped_image_buffer = crop_to_square(image_file)
         with open(tmp_image_name, "wb") as f:
-            f.write(image_file.read())
+            f.write(cropped_image_buffer.read())
 
         # Перекодируем аудио в AAC-LC
         audio_stream = ffmpeg.input(tmp_audio_name)
@@ -106,6 +143,7 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
             except OSError:
                 pass
 
+
 @app.post("/trim_audio")
 async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(...), end: int = Form(...)):
     """
@@ -128,6 +166,7 @@ async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(..
         "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
     }
     return StreamingResponse(trimmed_audio_buffer, media_type="audio/mpeg", headers=headers)
+
 
 @app.post("/create_video")
 async def create_video_endpoint(
@@ -155,6 +194,24 @@ async def create_video_endpoint(
         "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
     }
     return StreamingResponse(io.BytesIO(video_bytes), media_type="video/mp4", headers=headers)
+
+
+def test_crop():
+    filename = "./examples/fire.png"
+    buffer = None
+    with open(filename, "rb") as f:
+        buffer = f.read()
+    print(len(buffer))
+    new_buffer = crop_to_square(io.BytesIO(buffer))
+    with open("./examples/new_fire.png", "wb") as f:
+        f.write(new_buffer.getbuffer())
+    print('ok')
+
+
+
+if __name__ == "__main__":
+    test_crop()
+
 
 # Инструкции по запуску FastAPI (для локального тестирования):
 # 1. Установите необходимые библиотеки: pip install fastapi uvicorn pydub ffmpeg-python
