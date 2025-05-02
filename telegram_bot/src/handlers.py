@@ -1,7 +1,5 @@
 import logging
 import os
-import httpx
-from collections import namedtuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest, TelegramError
@@ -245,7 +243,7 @@ async def save_audio_by_id(
 
     duration = response.data.get('duration')
 
-    assert duration is int
+    assert isinstance(duration, int)
 
     user_data = context.user_data
 
@@ -268,6 +266,8 @@ async def save_audio_by_id(
     )
 
     user_data[st.MP3_FILE_PATH] = file_path
+
+    logger.info(f'Файл загружен: {file_path}')
 
     return ConversationHandler.END
 
