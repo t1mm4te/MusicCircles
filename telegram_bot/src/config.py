@@ -11,6 +11,11 @@ if not TB_TOKEN:
                      'TB_TOKEN (Telegram Bot Token)')
 
 DOWNLOAD_FOLDER = os.getenv('DOWNLOAD_FOLDER')
-if not TB_TOKEN:
+if not DOWNLOAD_FOLDER:
     raise ValueError('Необходимо установить переменную окружения '
                      'DOWNLOAD_FOLDER (папка для загрузки файлов)')
+
+AUDIO_RECEIVER_API_URL = os.getenv('AUDIO_RECEIVER_API_URL')
+if not AUDIO_RECEIVER_API_URL:
+    raise ValueError('Необходимо установить переменную окружения '
+                     'AUDIO_RECEIVER_API_URL (URL для доступа к API)')

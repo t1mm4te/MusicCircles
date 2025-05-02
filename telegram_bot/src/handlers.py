@@ -1,5 +1,6 @@
 import logging
 import os
+import httpx
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest, TelegramError
@@ -136,7 +137,7 @@ async def save_audio(update: Update,
 
     await message.reply_text('Файл загружен!')
 
-    # настройки по умолчанию, после вынести в отдельный метод
+    # Настройки по умолчанию, после вынести в отдельный метод.
     user_data[st.DURATION_LEFT_BORDER] = str(0)
     user_data[st.DURATION_RIGHT_BORDER] = str(min(60, file_duration))
 
@@ -158,8 +159,74 @@ async def search_audio_by_name(
     assert update.message is not None
     assert update.message.text is not None
 
-    user_text = update.message.text
-    logger.info(user_text)
+    song_name = update.message.text
+    logger.info(song_name)
+
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/search/'
+    params = {'query': song_name}
+
+    had_error = False
+
+    data = []
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
+            response.raise_for_status()  # Проверяем на ошибки HTTP (4xx, 5xx)
+
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Ошибка HTTP при запросе к FastAPI: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        had_error = True
+
+    except httpx.RequestError as e:
+        logger.error(f'Ошибка соединения с FastAPI: {e}')
+        had_error = True
+
+    except Exception as e:
+        logger.error(f'Непредвиденная ошибка: {e}')
+        had_error = True
+
+    if had_error:
+        await update.message.reply_text(
+            'Произошла ошибка. Попробуйте еще раз позже.'
+        )
+        return None
+
+    data = response.json().get('results', [])  # Парсим JSON ответ
+
+    if not data:
+        await update.message.reply_text(
+            'Ничего не получилось найти.'
+        )
+        return None
+
+    text = 'Выбери одну песню из найденных:'
+    inline_keyboards = []
+    for i, item in enumerate(data, start=1):
+        id = item.get('id')
+        title = item.get('title', 'Без названия')
+        artists = ', '.join(item.get('artists', ['Неизвестный']))
+        duration = item.get('duration')
+        text += f'\n {i}) {title} – {artists} ({duration})'
+        inline_keyboards.append(
+            InlineKeyboardButton(
+                str(i),
+                callback_data=str(id))
+        )
+
+    keyboard = [
+        inline_keyboards[:1],
+        inline_keyboards[1:]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        text,
+        reply_markup=reply_markup
+    )
 
     return st.SELECTING_SONG
 
@@ -174,6 +241,8 @@ async def save_audio_by_id(
 
     query = update.callback_query
     await query.answer()
+
+    logger.info(query.data)
 
     return ConversationHandler.END
 
