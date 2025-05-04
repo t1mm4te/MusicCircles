@@ -45,8 +45,14 @@ def main() -> None:
         states={
             st.SELECTING_SONG: [
                 CallbackQueryHandler(
-                    hnd.save_audio_by_id,
+                    hnd.save_selected_audio,
                     pattern=r'^\d+$'
+                )
+            ],
+            st.TYPING_SONG_NAME: [
+                MessageHandler(
+                    filters.TEXT,
+                    hnd.search_audio_by_name
                 )
             ]
         },
@@ -100,13 +106,26 @@ def main() -> None:
         }
     )
 
-    conv_handler = ConversationHandler(
+    # cover_conv_handler = ConversationHandler(
+    #     entry_points=[
+
+    #     ],
+    #     states={
+
+    #     },
+    #     fallbacks=[],
+    # )
+
+    main_conv_handler = ConversationHandler(
         # Принимает аудио или название песни и выводит кнопки для выбора опций.
         entry_points=[
+            # Handler для обработки присланных аудиофайлов/голосовых.
             MessageHandler(
                 filters.AUDIO | filters.VOICE,
                 hnd.save_audio
             ),
+
+            # Handler для обработки поиска аудиофайлов.
             selecting_song_conv_handler
         ],
         states={
@@ -132,7 +151,7 @@ def main() -> None:
     )
 
     application.add_handler(start_handler)
-    application.add_handler(conv_handler)
+    application.add_handler(main_conv_handler)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

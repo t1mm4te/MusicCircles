@@ -15,7 +15,7 @@ class Response(NamedTuple):
 async def get_data_from_api(
         url: str,
         params: dict[str, str] | None = None
-        ) -> Response:
+) -> Response:
     had_error = False
 
     try:
@@ -71,5 +71,30 @@ async def download_track_stream(
             with open(file_path, "wb") as f:
                 async for chunk in resp.aiter_bytes():
                     f.write(chunk)
+
+    return file_path
+
+
+async def download_cover(
+    url: str,
+    song_id: str,
+    save_dir: str
+) -> str:
+    """
+    Скачивает обложку трека track_id и сохраняет в папку save_dir.
+    Возвращает путь к сохранённому файлу.
+    """
+    # url = f"{conf.AUDIO_RECEIVER_API_URL}/track/{song_id}/cover"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, timeout=10.0)
+        response.raise_for_status()
+
+        ext = '.jpg'
+
+        os.makedirs(save_dir, exist_ok=True)
+        file_path = os.path.join(save_dir, f'{song_id}{ext}')
+
+        with open(file_path, "wb") as f:
+            f.write(response.content)
 
     return file_path

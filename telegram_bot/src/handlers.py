@@ -30,7 +30,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await update.message.reply_text(
         'Привет, я бот, который создает музыкальные кружочки.\n'
-        'Пришли мне файл с твоей песней или голосовое сообщение'
+        'Напиши мне название песни или пришли файл с твоей песней '
+        'или голосовое сообщение.'
     )
 
 
@@ -129,7 +130,8 @@ async def save_audio(update: Update,
     assert conf.DOWNLOAD_FOLDER is not None
 
     file_path = os.path.join(conf.DOWNLOAD_FOLDER, f'{file_name}')
-    user_data[st.MP3_FILE_PATH] = file_path
+    user_data[st.TRACK_ID] = file_id
+    user_data[st.TRACK_FILE_PATH] = file_path
     os.makedirs(conf.DOWNLOAD_FOLDER, exist_ok=True)
 
     await file.download_to_drive(file_path)
@@ -149,6 +151,7 @@ async def save_audio(update: Update,
     return st.CHOOSING_OPTIONS
 
 
+# ENTRY POINT / TYPING_SONG_NAME
 async def search_audio_by_name(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> str | None:
@@ -181,7 +184,7 @@ async def search_audio_by_name(
 
     if not data:
         await update.message.reply_text(
-            'Ничего не получилось найти.'
+            'Ничего не получилось найти. Попробуйте написать еще раз.'
         )
         return None
 
@@ -216,9 +219,10 @@ async def search_audio_by_name(
     return st.SELECTING_SONG
 
 
-async def save_audio_by_id(
+# SELECTING_SONG
+async def save_selected_audio(
         update: Update,
-        context: ContextTypes.DEFAULT_TYPE) -> int | None:
+        context: ContextTypes.DEFAULT_TYPE) -> int | str:
     """Сохраняет песню по id из callback query."""
     clear(update, context)
 
@@ -237,9 +241,9 @@ async def save_audio_by_id(
 
     if response.had_error:
         await query.edit_message_text(
-            'Произошла ошибка. Попробуйте позже.'
+            'Произошла ошибка. Попробуйте написать название песни заново.'
         )
-        return None
+        return st.TYPING_SONG_NAME
 
     duration = response.data.get('duration')
 
@@ -265,7 +269,8 @@ async def save_audio_by_id(
         save_dir=conf.DOWNLOAD_FOLDER
     )
 
-    user_data[st.MP3_FILE_PATH] = file_path
+    user_data[st.TRACK_ID] = id
+    user_data[st.TRACK_FILE_PATH] = file_path
 
     logger.info(f'Файл загружен: {file_path}')
 
@@ -536,8 +541,8 @@ def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user_data = context.user_data
 
-    if user_data.get(st.MP3_FILE_PATH):
-        path = user_data[st.MP3_FILE_PATH]
+    if user_data.get(st.TRACK_FILE_PATH):
+        path = user_data[st.TRACK_FILE_PATH]
         if os.path.exists(path):
             os.remove(path)
             logger.info(f'{user_info}: File {path} has been deleted')
