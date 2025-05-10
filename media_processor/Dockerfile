@@ -1,53 +1,40 @@
-# Этап 1: Базовый образ Python (Debian 12 Bookworm)
+# Этап 1: Базовый образ Python
 FROM python:3.12.3-slim
 
 # Установка переменных окружения
 ENV PYTHONUNBUFFERED=1
-ENV DEBIAN_FRONTEND=noninteractive 
-# Предотвращает интерактивные запросы apt
 
-# Этап 2: Установка системных зависимостей (FFmpeg из Debian Testing)
+# Этап 2: Установка системных зависимостей (включая FFmpeg)
+RUN apt-get update
 
-# Определяем кодовое имя базового дистрибутива (для python:3.12.3-slim это bookworm)
-ARG BASE_CODENAME=bookworm
-# Определяем кодовое имя Testing (на момент написания это trixie)
-ARG TESTING_CODENAME=trixie
+RUN apt install -y ffmpeg
 
-RUN <<EOF
-set -e
-# Добавляем репозиторий Debian Testing (Trixie)
-echo "deb http://deb.debian.org/debian ${TESTING_CODENAME} main" > /etc/apt/sources.list.d/testing.list
+RUN apt-get update && \
+    # Устанавливаем ffmpeg и ca-certificates (нужны для HTTPS)
+    # Утилиты wget и p7zip-full больше не нужны
+    apt-get install -y --no-install-recommends ca-certificates && \
+    # Очистка кэша apt
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Настраиваем APT Pinning
-# Отдаем предпочтение пакетам из основного релиза (Bookworm)
-echo "Package: *" > /etc/apt/preferences.d/99pinning
-echo "Pin: release n=${BASE_CODENAME}" >> /etc/apt/preferences.d/99pinning
-echo "Pin-Priority: 900" >> /etc/apt/preferences.d/99pinning
-echo "" >> /etc/apt/preferences.d/99pinning
-# Разрешаем установку пакетов из Testing (Trixie), но с низким приоритетом
-echo "Package: *" >> /etc/apt/preferences.d/99pinning
-echo "Pin: release n=${TESTING_CODENAME}" >> /etc/apt/preferences.d/99pinning
-echo "Pin-Priority: 500" >> /etc/apt/preferences.d/99pinning
 
-# Обновляем список пакетов ПОСЛЕ добавления репозитория и настройки pinning
-apt-get update
+# !!! ВАЖНОЕ ЗАМЕЧАНИЕ !!!
+# Стандартная сборка ffmpeg из репозиториев Debian (на котором основан slim)
+# может НЕ включать поддержку кодеков, таких как libx264 (для H.264).
+# Ваше приложение использует vcodec='libx264' в create_video_from_audio_and_cover_files.
+# Если после сборки и запуска видео не будет создаваться с H.264,
+# возможно, потребуется включить репозиторий non-free в Debian и
+# установить ffmpeg оттуда, или вернуться к статической сборке.
+# Пример (НЕ РАСКОММЕНТИРОВАТЬ БЕЗ НЕОБХОДИМОСТИ, усложняет Dockerfile):
+# RUN echo "deb http://deb.debian.org/debian/ $(grep VERSION_CODENAME /etc/os-release) main contrib non-free" >> /etc/apt/sources.list && \
+#     apt-get update && \
+#     apt-get install -y --no-install-recommends ffmpeg && \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем ffmpeg ИЗ TESTING (-t ${TESTING_CODENAME})
-# Также устанавливаем ca-certificates, необходимые для https
-# Используем --no-install-recommends для минимизации размера
-apt-get install -y --no-install-recommends -t ${TESTING_CODENAME} ffmpeg ca-certificates
-
-# Очистка кэша apt
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-# Удаляем ненужные файлы настроек apt
-rm /etc/apt/sources.list.d/testing.list
-rm /etc/apt/preferences.d/99pinning
-EOF
-
-# Проверяем установленную версию FFmpeg (должна быть ~6.1)
+# Проверяем установленную версию FFmpeg (опционально)
 RUN echo "Verifying FFmpeg installation:" && \
-    ffmpeg -version | head -n 1
+    ffmpeg -version
 
 # Этап 3: Установка рабочей директории
 WORKDIR /app
@@ -59,11 +46,18 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# RUN pip install uvicorn
+# RUN pip install pip install uvicorn
 # Этап 5: Копирование кода приложения
+# Копируем все файлы из текущей директории (где лежит Dockerfile) в рабочую директорию контейнера (/app)
 COPY . .
 
-# Этап 6: Открытие порта (если используете стандартный порт FastAPI)
+# Этап 6: Открытие порта
+# Открываем порт 8000, на котором будет работать FastAPI по умолчанию
 # EXPOSE 8000
 
 # Этап 7: Команда запуска приложения
+# Запускаем uvicorn сервер, который будет слушать на всех интерфейсах (0.0.0.0)
+# main - имя вашего python файла (например, main.py)
+# app - имя экземпляра FastAPI в вашем файле (app = FastAPI())
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
