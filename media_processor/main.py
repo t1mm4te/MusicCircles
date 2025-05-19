@@ -192,6 +192,40 @@ async def validate_audio_content(file: UploadFile) -> bytes:
         raise HTTPException(400, "Не удалось обработать аудиофайл")
     return content
 
+def validate_audio_range(start: int, end: int):
+    """
+    Проверка логической корректности диапазона.
+
+    Args:
+        start: Начало обрезки.
+        end: Конец обрезки.
+    """
+    if start < 0 or end < 0:
+        raise HTTPException(status_code=400, detail="Параметры времени не могут быть отрицательными")
+    if start >= end:
+        raise HTTPException(status_code=400, detail="Параметр start должен быть меньше end")
+
+def validate_audio_duration(contents: bytes, start: int, end: int):
+    """
+    Проверка, что start и end не превышают длительность аудио.
+
+    Args:
+        contents: Аудиофайл в байтах
+        start: Начало обрезки.
+        end: Конец обрезки.
+    """
+    try:
+        audio = AudioSegment.from_file(io.BytesIO(contents))
+        duration = audio.duration_seconds
+    except Exception:
+        raise HTTPException(status_code=400, detail="Не удалось определить длительность аудио")
+
+    if start > duration or end > duration:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Параметры start и end не должны превышать длительность аудио ({duration:.2f} сек)"
+        )
+
 @app.post("/trim_audio")
 async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(...), end: int = Form(...)):
     """
@@ -206,11 +240,12 @@ async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(..
         StreamingResponse: HTTP-ответ с обрезанным аудиофайлом.
     """
 
-    if start >= end:
-        raise HTTPException(status_code=400, detail="Параметр start должен быть меньше end")
-
+    # Проверка корректности параметров start и end
+    validate_audio_range(start, end)
     # Проверка, что это действительно поддерживаемый аудиофайл
     contents = await validate_audio_content(file)
+    # Проверка длительности файла в секундах
+    validate_audio_duration(contents, start, end)
 
     trimmed_audio_buffer = await trim_audio(contents, start, end)
     filename_base, ext = os.path.splitext(file.filename)
