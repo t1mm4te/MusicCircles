@@ -163,6 +163,12 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
                 pass
 
 async def validate_image_content(file: UploadFile):
+    """
+    Проверка изображения на корректность формата
+
+    Args:
+        file: Загружаемый файл с изображением.
+    """
     content = await file.read()
     try:
         Image.open(io.BytesIO(content))
@@ -171,6 +177,12 @@ async def validate_image_content(file: UploadFile):
     return content
 
 async def validate_audio_content(file: UploadFile) -> bytes:
+    """
+    Проверка аудио на корректность формата
+
+    Args:
+        file: Загружаемый аудиофайл.
+    """
     content = await file.read()
     try:
         AudioSegment.from_file(io.BytesIO(content))
