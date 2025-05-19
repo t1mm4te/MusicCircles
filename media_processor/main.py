@@ -1,6 +1,7 @@
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 import io
 import os
 from urllib.parse import quote_plus
@@ -165,7 +166,25 @@ async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(..
     Returns:
         StreamingResponse: HTTP-ответ с обрезанным аудиофайлом.
     """
+
+    if start >= end:
+        raise HTTPException(status_code=400, detail="Параметр start должен быть меньше end")
+
     contents = await file.read()
+
+    # Проверка, что это действительно поддерживаемый аудиофайл
+    try:
+        AudioSegment.from_file(io.BytesIO(contents))
+    except CouldntDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Файл не является поддерживаемым аудиоформатом (AIFF, AU, MP3, WAV, M4A, WMA и др.)"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ошибка при обработке аудиофайла: {str(e)}"
+        )
     trimmed_audio_buffer = await trim_audio(contents, start, end)
     filename_base, ext = os.path.splitext(file.filename)
     output_filename = f"cut_{filename_base}_{start}_{end}.mp3"
@@ -193,6 +212,21 @@ async def create_video_endpoint(
     """
     audio_content = await audio_file.read()
     image_content = await image_file.read()
+
+    # Проверка, можно ли прочитать аудиофайл
+    try:
+        AudioSegment.from_file(io.BytesIO(audio_content))
+    except CouldntDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Неподдерживаемый формат аудиофайла. Поддерживаются: AIFF, AU, MID, MP3, M4A, MP4, WAV, WMA"
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Ошибка при обработке аудиофайла"
+        )
+
     video_bytes = create_video_from_audio_and_cover_files(io.BytesIO(audio_content), io.BytesIO(image_content))
     filename_base_audio, _ = os.path.splitext(audio_file.filename)
     filename_base_image, _ = os.path.splitext(image_file.filename)
