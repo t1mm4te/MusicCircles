@@ -74,6 +74,16 @@ def crop_to_square(image_file: BinaryIO) -> io.BytesIO:
 
 
 def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: BinaryIO) -> bytes:
+    """
+    Создание видео из аудио и обложки
+
+    Args:
+        audio_file: Загружаемый аудиофайл.
+        image_file: Загружаемый файл с изображением.
+
+    Returns:
+        video_bytes: Видео в байтах.
+    """
     audio_suffix = ".aac"
     audio_converted_suffix = ".aac"
     image_suffix = ".png"
@@ -153,17 +163,22 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
                 pass
 
 async def validate_image_content(file: UploadFile):
+    content = await file.read()
     try:
-        content = await file.read()
-        img = Image.open(io.BytesIO(content))
-        img_format = img.format.upper()
-        allowed_formats = {"JPEG", "PNG", "BMP", "GIF", "TIFF", "WEBP", "ICO", "SVG"}
-        if img_format not in allowed_formats:
-            raise HTTPException(status_code=400, detail=f"Недопустимый формат изображения: {img_format}")
-        # Возвращаем содержимое для дальнейшего использования, т.к. мы прочитали поток
-        return content
+        Image.open(io.BytesIO(content))
     except Exception:
-        raise HTTPException(status_code=400, detail="Не удалось обработать файл как изображение")
+        raise HTTPException(400, "Не удалось обработать файл как изображение")
+    return content
+
+async def validate_audio_content(file: UploadFile) -> bytes:
+    content = await file.read()
+    try:
+        AudioSegment.from_file(io.BytesIO(content))
+    except CouldntDecodeError:
+        raise HTTPException(400, "Файл не является поддерживаемым аудиоформатом")
+    except Exception:
+        raise HTTPException(400, "Не удалось обработать аудиофайл")
+    return content
 
 @app.post("/trim_audio")
 async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(...), end: int = Form(...)):
@@ -182,21 +197,9 @@ async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(..
     if start >= end:
         raise HTTPException(status_code=400, detail="Параметр start должен быть меньше end")
 
-    contents = await file.read()
-
     # Проверка, что это действительно поддерживаемый аудиофайл
-    try:
-        AudioSegment.from_file(io.BytesIO(contents))
-    except CouldntDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="Файл не является поддерживаемым аудиоформатом (AIFF, AU, MP3, WAV, M4A, WMA и др.)"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ошибка при обработке аудиофайла: {str(e)}"
-        )
+    contents = await validate_audio_content(file)
+
     trimmed_audio_buffer = await trim_audio(contents, start, end)
     filename_base, ext = os.path.splitext(file.filename)
     output_filename = f"cut_{filename_base}_{start}_{end}.mp3"
@@ -222,22 +225,8 @@ async def create_video_endpoint(
     Returns:
         StreamingResponse: HTTP-ответ с созданным видеофайлом.
     """
-    audio_content = await audio_file.read()
+    audio_content = await validate_audio_content(audio_file)
     image_content = await validate_image_content(image_file)
-
-    # Проверка, можно ли прочитать аудиофайл
-    try:
-        AudioSegment.from_file(io.BytesIO(audio_content))
-    except CouldntDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="Неподдерживаемый формат аудиофайла. Поддерживаются: AIFF, AU, MID, MP3, M4A, MP4, WAV, WMA"
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Ошибка при обработке аудиофайла"
-        )
 
     video_bytes = create_video_from_audio_and_cover_files(io.BytesIO(audio_content), io.BytesIO(image_content))
     filename_base_audio, _ = os.path.splitext(audio_file.filename)
