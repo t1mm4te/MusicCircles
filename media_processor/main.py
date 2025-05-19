@@ -152,6 +152,18 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
             except OSError:
                 pass
 
+async def validate_image_content(file: UploadFile):
+    try:
+        content = await file.read()
+        img = Image.open(io.BytesIO(content))
+        img_format = img.format.upper()
+        allowed_formats = {"JPEG", "PNG", "BMP", "GIF", "TIFF", "WEBP", "ICO", "SVG"}
+        if img_format not in allowed_formats:
+            raise HTTPException(status_code=400, detail=f"Недопустимый формат изображения: {img_format}")
+        # Возвращаем содержимое для дальнейшего использования, т.к. мы прочитали поток
+        return content
+    except Exception:
+        raise HTTPException(status_code=400, detail="Не удалось обработать файл как изображение")
 
 @app.post("/trim_audio")
 async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(...), end: int = Form(...)):
@@ -211,7 +223,7 @@ async def create_video_endpoint(
         StreamingResponse: HTTP-ответ с созданным видеофайлом.
     """
     audio_content = await audio_file.read()
-    image_content = await image_file.read()
+    image_content = await validate_image_content(image_file)
 
     # Проверка, можно ли прочитать аудиофайл
     try:
