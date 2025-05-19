@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
+from pydantic import BaseModel
 import io
 import os
 from urllib.parse import quote_plus
@@ -13,6 +14,8 @@ from PIL import Image
 
 app = FastAPI()
 
+class HTTPError(BaseModel):
+    detail: str
 
 async def trim_audio(audio_file: bytes, start_time: int, end_time: int) -> io.BytesIO:
     """
@@ -226,7 +229,23 @@ def validate_audio_duration(contents: bytes, start: int, end: int):
             detail=f"Параметры start и end не должны превышать длительность аудио ({duration:.2f} сек)"
         )
 
-@app.post("/trim_audio")
+@app.post(
+    "/trim_audio",
+    response_model=None,
+    responses={
+        400: {
+            "model": HTTPError,
+            "description": "Invalid request",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Параметр start должен быть меньше end"
+                    }
+                }
+            }
+        }
+    }
+)
 async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(...), end: int = Form(...)):
     """
     Endpoint для обрезки аудиофайла.
@@ -257,7 +276,24 @@ async def trim_audio_endpoint(file: UploadFile = File(...), start: int = Form(..
     return StreamingResponse(trimmed_audio_buffer, media_type="audio/mpeg", headers=headers)
 
 
-@app.post("/create_video")
+
+@app.post(
+    "/create_video",
+    response_model=None,
+    responses={
+        400: {
+            "model": HTTPError,
+            "description": "Invalid request",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Параметр start должен быть меньше end"
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_video_endpoint(
     audio_file: UploadFile = File(...),
     image_file: UploadFile = File(...)
