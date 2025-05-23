@@ -4,6 +4,8 @@
 env/
 venv/
 
+.idea/
+
 .mypy_cache
 
 config
