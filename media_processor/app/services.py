@@ -99,45 +99,48 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
         with open(tmp_image_name, "wb") as f:
             f.write(cropped_image_buffer.read())
 
-        # Перекодируем аудио в AAC-LC
+        # Перекодируем аудио в AAC-LC с нормализацией частоты и каналов
         audio_stream = ffmpeg.input(tmp_audio_name)
-        audio_stream = ffmpeg.output(
+        audio_out = ffmpeg.output(
             audio_stream,
             tmp_audio_converted_name,
             acodec='aac',
             ar='44100',
-            ac='2'
+            ac='2',
+            strict='experimental'
         )
         try:
-            ffmpeg.run(audio_stream, capture_stderr=True, quiet=False)
+            ffmpeg.run(audio_out, capture_stderr=True, quiet=False)
         except ffmpeg.Error as e:
             print("Ошибка при перекодировании аудио:")
             print(e.stderr.decode('utf8'))
             raise
 
-        # Создаём видео из изображения и перекодированного аудио
+        # Входы для видео и аудио
         image_stream = ffmpeg.input(tmp_image_name, loop=1, framerate=25)
-        # Добавляем фильтр scale для изменения размера изображения на четные значения
+        # Масштабируем изображение к четным размерам
         scaled_image_stream = image_stream.filter('scale', 'ceil(iw/2)*2', 'ceil(ih/2)*2')
-        video_stream = ffmpeg.input(tmp_audio_converted_name)
+        audio_input_stream = ffmpeg.input(tmp_audio_converted_name)
+
+        # Добавляем аудио фильтр для синхронизации, если перекодировать аудио:
+        # audio_filtered = audio_input_stream.filter('aresample', async=1)
+        # Но тут мы копируем аудио (acodec='copy'), поэтому не фильтруем.
+        duration_info = ffmpeg.probe(tmp_audio_converted_name)
+        duration = float(duration_info['format']['duration'])
+        duration = min(55, duration)
+
         output_stream = ffmpeg.output(
             scaled_image_stream,
-            video_stream,
+            audio_input_stream,
             tmp_video_name,
             vcodec='libx264',
-            # acodec='aac',
-            acodec='copy',
+            acodec='copy',       # копируем аудио
             pix_fmt='yuv420p',
-            shortest=None,
-            # Option 2: Explicitly try to shift timestamps
-            copyts=None, # Reset copyts if set earlier
-            start_at_zero=None, # Try adding this
-            vsync='cfr', # Constant frame rate might help sync
-            t='55',
-            **{'async': '1',  # Передаем как строку '1'
-               'movflags': '+faststart',
-               }# Another audio sync method, sometimes helps
-        )
+            vsync='cfr',         # фиксированный FPS
+            t=duration,              # ограничиваем длину видео 55 сек (если надо)
+            movflags='+faststart' # ускоренный старт для веба
+        ).global_args('-shortest')  # Останавливаем по более короткой дорожке (аудио или видео)
+
         try:
             ffmpeg.run(output_stream, capture_stderr=True, quiet=False)
         except ffmpeg.Error as e:
@@ -145,19 +148,20 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
             print(e.stderr.decode('utf8'))
             raise
 
-        # Возвращаем видео как байты
+        # Читаем результат и возвращаем
         with open(tmp_video_name, "rb") as f:
             video_bytes = f.read()
 
         return video_bytes
 
     finally:
-        # Удаляем временные файлы
+        # Чистим временные файлы
         for f in [tmp_audio_name, tmp_audio_converted_name, tmp_image_name, tmp_video_name]:
             try:
                 os.remove(f)
             except OSError:
                 pass
+
 
 # def test_crop():
 #    filename = "./examples/fire.png"
