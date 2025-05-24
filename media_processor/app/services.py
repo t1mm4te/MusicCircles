@@ -57,6 +57,8 @@ def crop_to_square(image_file: BinaryIO) -> io.BytesIO:
         bottom = (height + min_side) // 2
 
         cropped_img = img.crop((left, top, right, bottom))
+        if min_side > 640:
+            cropped_img = cropped_img.resize((640, 640), Image.LANCZOS)
         output_buffer = io.BytesIO()
         cropped_img.save(output_buffer, format="PNG")
         output_buffer.seek(0)
@@ -130,6 +132,7 @@ def create_video_from_audio_and_cover_files(audio_file: BinaryIO, image_file: Bi
             copyts=None, # Reset copyts if set earlier
             start_at_zero=None, # Try adding this
             vsync='cfr', # Constant frame rate might help sync
+            t='55',
             **{'async': '1',  # Передаем как строку '1'
                'movflags': '+faststart',
                }# Another audio sync method, sometimes helps
