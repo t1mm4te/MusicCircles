@@ -48,8 +48,8 @@ def crop_to_square(image_file: BinaryIO) -> io.BytesIO:
         img = Image.open(image_file)
         width, height = img.size
 
-        if width == height:
-            return image_file  # Изображение уже квадратное
+        # if width == height:
+        #     return image_file  # Изображение уже квадратное
 
         min_side = min(width, height)
         left = (width - min_side) // 2
