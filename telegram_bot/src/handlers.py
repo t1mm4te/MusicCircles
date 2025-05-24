@@ -274,6 +274,13 @@ async def save_selected_audio(
 
     logger.info(f'Файл загружен: {file_path}')
 
+    keyboard = get_main_menu(context)
+
+    await query.edit_message_text(
+        'Выберите опцию:',
+        reply_markup=keyboard
+    )
+
     return ConversationHandler.END
 
 
@@ -460,6 +467,8 @@ async def create_video_message(update: Update,
     """
     assert update.callback_query is not None
     assert update.effective_chat is not None
+    assert context.user_data is not None
+    assert conf.DOWNLOAD_FOLDER is not None
 
     query = update.callback_query
     await query.answer()
@@ -468,10 +477,72 @@ async def create_video_message(update: Update,
     bot = context.bot
     chat_id = update.effective_chat.id
 
-    VIDEO_NOTE_PATH = 'your_path'
+    user_data = context.user_data
 
-    if not os.path.exists(VIDEO_NOTE_PATH):
-        logger.error(f'Файл видео не найден по пути: {VIDEO_NOTE_PATH}')
+    url = f'{conf.MEDIA_PROCESSOR_API_URL}/trim_audio'
+    output_audio_file_path = f'{conf.DOWNLOAD_FOLDER}/trimmed_{user_data[st.TRACK_ID]}.mp3'
+
+    logger.info(
+        'Prepairing for trimming audio: '
+        f'{url=} '
+        f'{user_data[st.TRACK_FILE_PATH]=} '
+        f'{int(user_data[st.DURATION_LEFT_BORDER])=} '
+        f'{int(user_data[st.DURATION_RIGHT_BORDER])=} '
+        f'{output_audio_file_path=}'
+    )
+
+    is_audio_trimmed = await api_utils.trim_audio(
+        url=url,
+        file_path=user_data[st.TRACK_FILE_PATH],
+        start=int(user_data[st.DURATION_LEFT_BORDER]),
+        end=int(user_data[st.DURATION_RIGHT_BORDER]),
+        output_path=output_audio_file_path
+    )
+
+    if not is_audio_trimmed:
+        await bot.send_message(
+            chat_id=chat_id,
+            text='Ошибка при обрезке аудио.'
+        )
+
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{user_data[st.TRACK_ID]}/cover'
+
+    cover_file_path = await api_utils.download_cover(
+        url=url,
+        song_id=user_data[st.TRACK_ID],
+        save_dir=conf.DOWNLOAD_FOLDER
+    )
+
+    # cover_file_path = 'test_image.png'
+
+    url = f'{conf.MEDIA_PROCESSOR_API_URL}/create_video'
+    output_video_file_path = f'{conf.DOWNLOAD_FOLDER}/video_{user_data[st.TRACK_ID]}.mp4'
+
+    logger.info(
+        'Prepairing for trimming audio: '
+        f'{url=} '
+        f'{output_video_file_path=} '
+        f'{cover_file_path=} '
+        f'{output_audio_file_path=}'
+    )
+
+    is_video_created = await api_utils.create_video(
+        url=url,
+        audio_path=output_audio_file_path,
+        image_path=cover_file_path,
+        output_path=output_video_file_path
+    )
+
+    logger.info(f'Список файлов: {os.listdir(path=conf.DOWNLOAD_FOLDER)}')
+
+    if not is_video_created:
+        await bot.send_message(
+            chat_id=chat_id,
+            text='Ошибка при создании кружка.'
+        )
+
+    if not os.path.exists(output_video_file_path):
+        logger.error(f'Файл видео не найден по пути: {output_video_file_path}')
         await query.edit_message_text(
             'Ошибка, не могу создать кружок 😢'
         )
@@ -481,7 +552,7 @@ async def create_video_message(update: Update,
         logger.info(f'Попытка отправить видео-кружок в chat_id: {chat_id}')
 
         # Открываем файл в бинарном режиме для чтения ('rb')
-        with open(VIDEO_NOTE_PATH, 'rb') as video_file:
+        with open(output_video_file_path, 'rb') as video_file:
             await bot.send_video_note(
                 chat_id=chat_id,
                 video_note=video_file,

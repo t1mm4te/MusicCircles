@@ -84,7 +84,6 @@ async def download_cover(
     Скачивает обложку трека track_id и сохраняет в папку save_dir.
     Возвращает путь к сохранённому файлу.
     """
-    # url = f"{conf.AUDIO_RECEIVER_API_URL}/track/{song_id}/cover"
     async with httpx.AsyncClient() as client:
         response = await client.get(url, timeout=10.0)
         response.raise_for_status()
@@ -98,3 +97,88 @@ async def download_cover(
             f.write(response.content)
 
     return file_path
+
+
+async def trim_audio(
+        url: str,
+        file_path: str,
+        start: int,
+        end: int,
+        output_path: str
+) -> bool:
+    """
+    Обрезает аудиофайл через API и сохраняет его по указанному пути.
+
+    Args:
+        file_path (str): Путь к исходному аудиофайлу.
+        start (int): Время начала обрезки в секундах.
+        end (int): Время окончания обрезки в секундах.
+        output_path (str): Путь для сохранения обрезанного файла.
+
+    Returns:
+        bool: True, если успешно, иначе False.
+    """
+
+    try:
+        with open(file_path, 'rb') as file:
+            files = {'file': file}
+            data = {'start': str(start), 'end': str(end)}
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, files=files, data=data)
+                response.raise_for_status()
+
+                with open(output_path, 'wb') as output_file:
+                    output_file.write(response.content)
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка при обращении к API для обрезки аудио: {e}")
+        return False
+
+
+async def create_video(
+        url: str,
+        audio_path: str,
+        image_path: str,
+        output_path: str
+) -> bool:
+    """
+    Создает видео из аудиофайла и изображения через API и сохраняет его по указанному пути.
+
+    Args:
+        audio_path (str): Путь к исходному аудиофайлу.
+        image_path (str): Путь к изображению (обложка).
+        output_path (str): Путь для сохранения созданного видео.
+
+    Returns:
+        bool: True, если успешно, иначе False.
+    """
+
+    timeout_seconds = 30.0
+    timeout_config = httpx.Timeout(timeout_seconds, connect=10.0)
+
+    try:
+        with open(audio_path, 'rb') as audio_file, open(image_path, 'rb') as image_file:
+            files = {
+                'audio_file': audio_file,
+                'image_file': image_file
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    url,
+                    files=files,
+                    timeout=timeout_config
+                )
+                response.raise_for_status()
+
+                with open(output_path, 'wb') as output_file:
+                    output_file.write(response.content)
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка при обращении к API для создания видео: {e}")
+        return False

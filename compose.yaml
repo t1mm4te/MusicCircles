@@ -13,7 +13,13 @@ services:
       timeout: 5s      # Считать неудачей, если ответ не пришел за 5 секунд
       retries: 5       # Количество попыток перед тем, как пометить как нездоровый
       start_period: 10s # Дать 10 секунд на первоначальный запуск перед первыми проверками
-
+  
+  media_processor:
+    build: ./media_processor
+    image: python-media-processor-api
+    container_name: processor-api
+    ports:
+      - "8000:8000"
   
   telegram_bot:
     build: ./telegram_bot

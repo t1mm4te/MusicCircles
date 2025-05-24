@@ -19,3 +19,8 @@ AUDIO_RECEIVER_API_URL = os.getenv('AUDIO_RECEIVER_API_URL')
 if not AUDIO_RECEIVER_API_URL:
     raise ValueError('Необходимо установить переменную окружения '
                      'AUDIO_RECEIVER_API_URL (URL для доступа к API)')
+
+MEDIA_PROCESSOR_API_URL = os.getenv('MEDIA_PROCESSOR_API_URL')
+if not MEDIA_PROCESSOR_API_URL:
+    raise ValueError('Необходимо установить переменную окружения '
+                     'MEDIA_PROCESSOR_API_URL (URL для доступа к API)')
