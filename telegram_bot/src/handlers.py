@@ -22,6 +22,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Печатает приветственное сообщение.
     """
+    clear_user_data(update, context)
+
     assert update.message is not None
     assert update.message.from_user is not None
 
@@ -30,8 +32,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await update.message.reply_text(
         'Привет, я бот, который создает музыкальные кружочки.\n'
-        'Напиши мне название песни или пришли файл с твоей песней '
-        'или голосовое сообщение.'
+        'Напиши мне название песни.'
     )
 
 
@@ -76,8 +77,6 @@ async def save_audio(update: Update,
     Проверка аудио и запоминание file_id.
     Показ меню для выбора опций.
     """
-    clear(update, context)
-
     assert update.message is not None
 
     message = update.message
@@ -163,26 +162,20 @@ async def search_audio_by_name(
     assert update.message is not None
     assert update.message.text is not None
 
-    song_name = update.message.text
-    logger.info(song_name)
+    track_name = update.message.text
+    logger.info(track_name)
 
-    url = f'{conf.AUDIO_RECEIVER_API_URL}/search/'
-    params = {'query': song_name}
-
-    response = await api_utils.get_data_from_api(
-        url=url,
-        params=params
+    tracks = await api_utils.search_for_tracks(
+        track_name=track_name
     )
 
-    if response.had_error:
+    if tracks is None:
         await update.message.reply_text(
             'Произошла ошибка. Попробуйте еще раз позже.'
         )
         return None
 
-    data = response.data.get('results', [])  # Парсим JSON ответ
-
-    if not data:
+    if not tracks:
         await update.message.reply_text(
             'Ничего не получилось найти. Попробуйте написать еще раз.'
         )
@@ -190,19 +183,14 @@ async def search_audio_by_name(
 
     text = 'Выбери одну песню из найденных:'
     inline_keyboards = []
-    for i, item in enumerate(data, start=1):
-        id = item.get('id')
-        title = item.get('title', 'Без названия')
-        artists = ', '.join(item.get('artists', ['Неизвестный']))
-        duration = item.get('duration') // 1000  # В секундах.
-
-        text += (f'\n {i}) {title} – {artists} '
-                 f'({duration // 60}:{duration % 60})')
+    for i, track in enumerate(tracks, start=1):
+        text += (f'\n {i}) {track.title} – {track.artists} '
+                 f'({track.duration // 60}:{track.duration % 60})')
 
         inline_keyboards.append(
             InlineKeyboardButton(
                 str(i),
-                callback_data=str(id))
+                callback_data=str(track.id))
         )
 
     keyboard = [
@@ -224,30 +212,23 @@ async def save_selected_audio(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> int | str:
     """Сохраняет песню по id из callback query."""
-    clear(update, context)
 
     assert update.callback_query is not None
 
     query = update.callback_query
+    assert query.data is not None
     await query.answer()
 
     assert context.user_data is not None
 
-    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{query.data}/info'
+    id = query.data
+    duration = await api_utils.get_track_info(track_id=id)
 
-    response = await api_utils.get_data_from_api(
-        url=url
-    )
-
-    if response.had_error:
+    if not duration:
         await query.edit_message_text(
             'Произошла ошибка. Попробуйте написать название песни заново.'
         )
         return st.TYPING_SONG_NAME
-
-    duration = response.data.get('duration')
-
-    assert isinstance(duration, int)
 
     user_data = context.user_data
 
@@ -257,15 +238,13 @@ async def save_selected_audio(
 
     # Get mp3 file.
 
-    id = query.data
     url = f"{conf.AUDIO_RECEIVER_API_URL}/track/{id}/stream"
 
-    assert id is not None
     assert conf.DOWNLOAD_FOLDER is not None
 
     file_path = await api_utils.download_track_stream(
         url=url,
-        song_id=id,
+        track_id=id,
         save_dir=conf.DOWNLOAD_FOLDER
     )
 
@@ -479,8 +458,10 @@ async def create_video_message(update: Update,
 
     user_data = context.user_data
 
+    track_id = user_data[st.TRACK_ID]
+
     url = f'{conf.MEDIA_PROCESSOR_API_URL}/trim_audio'
-    output_audio_file_path = f'{conf.DOWNLOAD_FOLDER}/trimmed_{user_data[st.TRACK_ID]}.mp3'
+    output_audio_file_path = f'{conf.DOWNLOAD_FOLDER}/trimmed_{track_id}.mp3'
 
     logger.info(
         'Prepairing for trimming audio: '
@@ -505,18 +486,18 @@ async def create_video_message(update: Update,
             text='Ошибка при обрезке аудио.'
         )
 
-    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{user_data[st.TRACK_ID]}/cover'
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{track_id}/cover'
 
     cover_file_path = await api_utils.download_cover(
         url=url,
-        song_id=user_data[st.TRACK_ID],
+        song_id=track_id,
         save_dir=conf.DOWNLOAD_FOLDER
     )
 
-    # cover_file_path = 'test_image.png'
+    # cover_file_path = 'examples/vinyl_default.jpg'
 
     url = f'{conf.MEDIA_PROCESSOR_API_URL}/create_video'
-    output_video_file_path = f'{conf.DOWNLOAD_FOLDER}/video_{user_data[st.TRACK_ID]}.mp4'
+    output_video_file_path = f'{conf.DOWNLOAD_FOLDER}/video_{track_id}.mp4'
 
     logger.info(
         'Prepairing for trimming audio: '
@@ -582,7 +563,7 @@ async def create_video_message(update: Update,
     except Exception as e:
         logger.error(f'Неожиданная ошибка: {e}')
 
-    clear(update, context)
+    clear_user_data(update, context)
     return ConversationHandler.END
 
 
@@ -593,7 +574,7 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     pass
 
 
-def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def clear_user_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Удаляет загруженный файл, очищает user_data.
     """

@@ -2,6 +2,9 @@ import os
 import logging
 import httpx
 from typing import NamedTuple
+import traceback
+
+import src.config as conf
 
 
 logger = logging.getLogger(__name__)
@@ -12,43 +15,103 @@ class Response(NamedTuple):
     had_error: bool
 
 
-async def get_data_from_api(
-        url: str,
-        params: dict[str, str] | None = None
-) -> Response:
-    had_error = False
+class TrackInfo(NamedTuple):
+    id: int
+    title: str
+    artists: str
+    duration: int
 
+
+async def search_for_tracks(
+    track_name: str
+) -> list[TrackInfo] | None:
+    """
+    Поиск треков по названию.
+    Возвращает список треков (возможно пустой).
+    """
+
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/search/'
+    params = {'query': track_name}
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params, timeout=10.0)
-            response.raise_for_status()  # Проверяем на ошибки HTTP (4xx, 5xx)
+            response.raise_for_status()
+
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            'Ошибка HTTP при запросе к API: '
+            f'{e.response.status_code} - {e.response.text}'
+        )
+        return None
+
+    except httpx.RequestError as e:
+        logger.error(f'Ошибка соединения с API: {e}')
+        return None
+
+    except Exception as e:
+        logger.error(f'Непредвиденная ошибка: {e}')
+        return None
+
+    data = response.json().get('results', [])
+
+    tracks: list[TrackInfo] = []
+
+    for track in data:
+        id = track.get('id')
+        title = track.get('title', 'Без названия')
+        artists = ', '.join(track.get('artists', ['Неизвестный']))
+        duration = track.get('duration') // 1000  # In seconds.
+
+        tracks.append(
+            TrackInfo(
+                id=id,
+                title=title,
+                artists=artists,
+                duration=duration
+            )
+        )
+
+    return tracks
+
+
+async def get_track_info(
+    track_id: str
+) -> int | None:
+    """Получение информации о треке по id."""
+
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{track_id}/info'
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            response.raise_for_status()
 
     except httpx.HTTPStatusError as e:
         logger.error(
             'Ошибка HTTP при запросе к FastAPI: '
             f'{e.response.status_code} - {e.response.text}'
         )
-        had_error = True
+        return None
 
     except httpx.RequestError as e:
         logger.error(f'Ошибка соединения с FastAPI: {e}')
-        had_error = True
+        return None
 
     except Exception as e:
         logger.error(f'Непредвиденная ошибка: {e}')
-        had_error = True
+        return None
 
-    if had_error:
-        return Response(data={}, had_error=had_error)
+    duration = response.json().get('duration')
 
-    data = response.json()
+    if not isinstance(duration, int):
+        logger.error(f'duration не int: {duration.__class__}')
+        return None
 
-    return Response(data=data, had_error=had_error)
+    return duration // 1000  # Duration in seconds.
 
 
 async def download_track_stream(
     url: str,
-    song_id: str,
+    track_id: str,
     save_dir: str
 ) -> str:
     """
@@ -65,7 +128,7 @@ async def download_track_stream(
             ext = '.mp3'
 
             os.makedirs(save_dir, exist_ok=True)
-            file_path = os.path.join(save_dir, f'{song_id}{ext}')
+            file_path = os.path.join(save_dir, f'{track_id}{ext}')
 
             # Записываем чанки по мере поступления
             with open(file_path, "wb") as f:
@@ -156,11 +219,12 @@ async def create_video(
         bool: True, если успешно, иначе False.
     """
 
-    timeout_seconds = 30.0
+    timeout_seconds = 120.0
     timeout_config = httpx.Timeout(timeout_seconds, connect=10.0)
 
     try:
         with open(audio_path, 'rb') as audio_file, open(image_path, 'rb') as image_file:
+            logger.info('[create_video] Начинаю отправлять данные.')
             files = {
                 'audio_file': audio_file,
                 'image_file': image_file
@@ -180,5 +244,7 @@ async def create_video(
         return True
 
     except Exception as e:
-        logger.error(f"Ошибка при обращении к API для создания видео: {e}")
+        logger.error(
+            f"[{type(e).__name__}] Ошибка при обращении к API: {repr(e)}")
+        logger.error(traceback.format_exc())
         return False
