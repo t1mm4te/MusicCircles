@@ -81,7 +81,7 @@ async def stream_track(track_id: str):
             iter([track_bytes]),
             media_type="audio/mpeg",
             headers={
-                "Content-Disposition": f"inline; filename={track.title}.mp3",
+                "Content-Disposition": f"inline; filename=track_{track.trackId}.mp3",
                 "Content-Length": str(len(track_bytes))
             }
         )
