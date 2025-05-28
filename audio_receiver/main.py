@@ -6,13 +6,18 @@ from typing import Optional
 app = FastAPI(title="Yandex Music API Wrapper")
 
 
+@app.on_event("startup")
+async def startup_event():
+    await init_client()
+
+
 @app.get("/search/")
 async def search_tracks(query: str, limit: Optional[int] = 5):
     """
     Поиск треков по названию
     """
     try:
-        tracks = find_tracks_by_name(query)
+        tracks = await find_tracks_by_name(query)
         if not tracks:
             raise HTTPException(status_code=404, detail="Треки не найдены")
 
@@ -37,7 +42,7 @@ async def track_info(track_id: str):
     Получение полной информации о треке по его ID
     """
     try:
-        track = get_track_info(track_id)
+        track = await get_track_info(track_id)
         if not track:
             raise HTTPException(status_code=404, detail="Трек не найден")
 
@@ -56,8 +61,8 @@ async def get_track_cover_image(track_id: str):
     Получение обложки трека
     """
     try:
-        track = client.tracks(track_id)[0]
-        cover_bytes = get_track_cover(track)
+        track = await get_track_info(track_id)
+        cover_bytes = await get_track_cover(track)
         if not cover_bytes:
             raise HTTPException(status_code=404, detail="Обложка не найдена")
 
@@ -72,8 +77,8 @@ async def stream_track(track_id: str):
     Потоковое воспроизведение трека
     """
     try:
-        track = client.tracks(track_id)[0]
-        track_bytes = get_track(track)
+        track = await get_track_info(track_id)
+        track_bytes = await get_track_bytes(track)
         if not track_bytes:
             raise HTTPException(status_code=404, detail="Трек не найден")
 
