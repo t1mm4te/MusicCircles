@@ -10,11 +10,6 @@ import src.config as conf
 logger = logging.getLogger(__name__)
 
 
-class Response(NamedTuple):
-    data: dict
-    had_error: bool
-
-
 class TrackInfo(NamedTuple):
     id: int
     title: str
@@ -58,8 +53,8 @@ async def search_for_tracks(
 
     for track in data:
         id = track.get('id')
-        title = track.get('title', 'Без названия')
-        artists = ', '.join(track.get('artists', ['Неизвестный']))
+        title = track.get('title')
+        artists = ', '.join(track.get('artists'))
         duration = track.get('duration') // 1000  # In seconds.
 
         tracks.append(
@@ -139,31 +134,37 @@ async def download_track_stream(
 
 
 async def download_cover(
-    url: str,
-    song_id: str,
+    track_id: str,
     save_dir: str
 ) -> str:
     """
     Скачивает обложку трека track_id и сохраняет в папку save_dir.
     Возвращает путь к сохранённому файлу.
     """
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=10.0)
-        response.raise_for_status()
 
-        ext = '.jpg'
+    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{track_id}/cover'
 
-        os.makedirs(save_dir, exist_ok=True)
-        file_path = os.path.join(save_dir, f'{song_id}{ext}')
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            response.raise_for_status()
 
-        with open(file_path, "wb") as f:
-            f.write(response.content)
+            ext = '.jpg'
 
-    return file_path
+            os.makedirs(save_dir, exist_ok=True)
+            file_path = os.path.join(save_dir, f'{track_id}{ext}')
+
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            return file_path
+
+    except Exception as e:
+        logger.error(f"Ошибка при обращении к API для обрезки аудио: {e}")
+
+    return ''  # Возвращаем пустую строку в случае ошибки
 
 
 async def trim_audio(
-        url: str,
         file_path: str,
         start: int,
         end: int,
@@ -181,6 +182,8 @@ async def trim_audio(
     Returns:
         bool: True, если успешно, иначе False.
     """
+
+    url = f'{conf.MEDIA_PROCESSOR_API_URL}/trim_audio'
 
     try:
         with open(file_path, 'rb') as file:
@@ -202,13 +205,13 @@ async def trim_audio(
 
 
 async def create_video(
-        url: str,
         audio_path: str,
         image_path: str,
         output_path: str
 ) -> bool:
     """
-    Создает видео из аудиофайла и изображения через API и сохраняет его по указанному пути.
+    Создает видео из аудиофайла и изображения через API
+    и сохраняет его по указанному пути.
 
     Args:
         audio_path (str): Путь к исходному аудиофайлу.
@@ -219,11 +222,16 @@ async def create_video(
         bool: True, если успешно, иначе False.
     """
 
+    url = f'{conf.MEDIA_PROCESSOR_API_URL}/create_video'
+
     timeout_seconds = 120.0
     timeout_config = httpx.Timeout(timeout_seconds, connect=10.0)
 
     try:
-        with open(audio_path, 'rb') as audio_file, open(image_path, 'rb') as image_file:
+        with (
+            open(audio_path, 'rb') as audio_file,
+            open(image_path, 'rb') as image_file
+        ):
             logger.info('[create_video] Начинаю отправлять данные.')
             files = {
                 'audio_file': audio_file,

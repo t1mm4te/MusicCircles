@@ -18,7 +18,10 @@ import src.api_utils as api_utils
 logger = logging.getLogger(__name__)
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """
     Печатает приветственное сообщение.
     """
@@ -36,7 +39,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-def get_main_menu(context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
+def get_main_menu(
+        context: ContextTypes.DEFAULT_TYPE
+) -> InlineKeyboardMarkup:
     """
     Возвращает основное меню.
 
@@ -71,8 +76,10 @@ def get_main_menu(context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
 
 
 # ENTRY_POINT
-async def save_audio(update: Update,
-                     context: ContextTypes.DEFAULT_TYPE) -> str | None:
+async def save_audio(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> str | None:
     """
     Проверка аудио и запоминание file_id.
     Показ меню для выбора опций.
@@ -153,7 +160,8 @@ async def save_audio(update: Update,
 # ENTRY POINT / TYPING_SONG_NAME
 async def search_audio_by_name(
         update: Update,
-        context: ContextTypes.DEFAULT_TYPE) -> str | None:
+        context: ContextTypes.DEFAULT_TYPE
+) -> str | None:
     """
     Ищет песню по названию, введенному пользователем,
     и выдает список возможных вариантов
@@ -210,7 +218,8 @@ async def search_audio_by_name(
 # SELECTING_SONG
 async def save_selected_audio(
         update: Update,
-        context: ContextTypes.DEFAULT_TYPE) -> int | str:
+        context: ContextTypes.DEFAULT_TYPE
+) -> int | str:
     """Сохраняет песню по id из callback query."""
 
     assert update.callback_query is not None
@@ -283,8 +292,10 @@ def get_file_name_extension(mime: str) -> str:
 
 
 # ENTRY POINT
-async def print_time_codes(update: Update,
-                           context: ContextTypes.DEFAULT_TYPE) -> str:
+async def print_time_codes(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> str:
     """
     Показывает меню для установки времени.
     """
@@ -322,8 +333,10 @@ async def print_time_codes(update: Update,
 
 
 # SELECTING_ACTION
-async def set_start_time(update: Update,
-                         context: ContextTypes.DEFAULT_TYPE) -> int:
+async def set_start_time(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> int:
     """
     Устанавливает время по умолчанию - с начала.
     """
@@ -349,8 +362,10 @@ async def set_start_time(update: Update,
 
 
 # SELECTING_ACTION
-async def print_custom_time_text(update: Update,
-                                 context: ContextTypes.DEFAULT_TYPE) -> str:
+async def print_custom_time_text(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> str:
     """
     Печатает текст для установки собственного времени.
     """
@@ -368,8 +383,10 @@ async def print_custom_time_text(update: Update,
 
 
 # INPUT_TIME_CODE
-async def set_custom_time(update: Update,
-                          context: ContextTypes.DEFAULT_TYPE) -> int:
+async def set_custom_time(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> int:
     """
     Принимает сообщение с указанием времени, запоминает его и возвращает меню.
     """
@@ -418,8 +435,10 @@ def get_seconds(time: str) -> int:
 
 
 # SELECTING_ACTION
-async def back_to_menu(update: Update,
-                       context: ContextTypes.DEFAULT_TYPE) -> int:
+async def back_to_menu(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> int:
     """
     Возвращает меню.
     """
@@ -439,8 +458,10 @@ async def back_to_menu(update: Update,
 
 
 # CHOOSING_OPTIONS
-async def create_video_message(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE) -> int:
+async def create_video_message(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> int:
     """
     Создает видео сообщение из ранее полученных данных.
     """
@@ -451,21 +472,28 @@ async def create_video_message(update: Update,
 
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text('Хорошо, создаю кружок')
+    video_note_processing_message = (
+        'Хорошо, создаю кружок...\n'
+        '⚙️'
+    )
+    await query.edit_message_text(
+        text=video_note_processing_message
+    )
 
     bot = context.bot
     chat_id = update.effective_chat.id
-
     user_data = context.user_data
 
     track_id = user_data[st.TRACK_ID]
 
-    url = f'{conf.MEDIA_PROCESSOR_API_URL}/trim_audio'
+    ERROR_MESSAGE_TO_USER = 'Ошибка, при создании кружка 😢'
+
+    # AUDIO TRIMMING.
+
     output_audio_file_path = f'{conf.DOWNLOAD_FOLDER}/trimmed_{track_id}.mp3'
 
     logger.info(
         'Prepairing for trimming audio: '
-        f'{url=} '
         f'{user_data[st.TRACK_FILE_PATH]=} '
         f'{int(user_data[st.DURATION_LEFT_BORDER])=} '
         f'{int(user_data[st.DURATION_RIGHT_BORDER])=} '
@@ -473,7 +501,6 @@ async def create_video_message(update: Update,
     )
 
     is_audio_trimmed = await api_utils.trim_audio(
-        url=url,
         file_path=user_data[st.TRACK_FILE_PATH],
         start=int(user_data[st.DURATION_LEFT_BORDER]),
         end=int(user_data[st.DURATION_RIGHT_BORDER]),
@@ -481,34 +508,50 @@ async def create_video_message(update: Update,
     )
 
     if not is_audio_trimmed:
-        await bot.send_message(
-            chat_id=chat_id,
-            text='Ошибка при обрезке аудио.'
+        logger.warning(
+            'Не удалось обрезать аудио.'
         )
+        await query.edit_message_text(
+            text=ERROR_MESSAGE_TO_USER
+        )
+        return ConversationHandler.END
 
-    url = f'{conf.AUDIO_RECEIVER_API_URL}/track/{track_id}/cover'
+    video_note_processing_message += '⚙️'
+    await query.edit_message_text(
+        text=video_note_processing_message
+    )
+
+    # COVER DOWNLOADING.
 
     cover_file_path = await api_utils.download_cover(
-        url=url,
-        song_id=track_id,
+        track_id=track_id,
         save_dir=conf.DOWNLOAD_FOLDER
     )
 
-    # cover_file_path = 'examples/vinyl_default.jpg'
+    if not cover_file_path:
+        logger.warning(
+            f'Не удалось скачать обложку для трека {track_id}. '
+            'Используется обложка по умолчанию.'
+        )
+        cover_file_path = 'video_note_images/vinyl_default.jpg'
 
-    url = f'{conf.MEDIA_PROCESSOR_API_URL}/create_video'
+    video_note_processing_message += '⚙️'
+    await query.edit_message_text(
+        text=video_note_processing_message
+    )
+
+    # VIDEO CREATION.
+
     output_video_file_path = f'{conf.DOWNLOAD_FOLDER}/video_{track_id}.mp4'
 
     logger.info(
         'Prepairing for trimming audio: '
-        f'{url=} '
         f'{output_video_file_path=} '
         f'{cover_file_path=} '
         f'{output_audio_file_path=}'
     )
 
     is_video_created = await api_utils.create_video(
-        url=url,
         audio_path=output_audio_file_path,
         image_path=cover_file_path,
         output_path=output_video_file_path
@@ -517,22 +560,22 @@ async def create_video_message(update: Update,
     logger.info(f'Список файлов: {os.listdir(path=conf.DOWNLOAD_FOLDER)}')
 
     if not is_video_created:
-        await bot.send_message(
-            chat_id=chat_id,
-            text='Ошибка при создании кружка.'
+        logger.error('Ошибка при создании видео-кружка.')
+        await query.edit_message_text(
+            text=ERROR_MESSAGE_TO_USER
         )
+        return ConversationHandler.END
 
     if not os.path.exists(output_video_file_path):
         logger.error(f'Файл видео не найден по пути: {output_video_file_path}')
         await query.edit_message_text(
-            'Ошибка, не могу создать кружок 😢'
+            text=ERROR_MESSAGE_TO_USER
         )
         return ConversationHandler.END
 
     try:
         logger.info(f'Попытка отправить видео-кружок в chat_id: {chat_id}')
 
-        # Открываем файл в бинарном режиме для чтения ('rb')
         with open(output_video_file_path, 'rb') as video_file:
             await bot.send_video_note(
                 chat_id=chat_id,
@@ -567,14 +610,20 @@ async def create_video_message(update: Update,
     return ConversationHandler.END
 
 
-async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def done(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """
     Команда для остановки бота, вызов clear.
     """
     pass
 
 
-def clear_user_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def clear_user_data(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """
     Удаляет загруженный файл, очищает user_data.
     """
