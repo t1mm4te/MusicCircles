@@ -230,8 +230,8 @@ async def save_selected_audio(
 
     assert context.user_data is not None
 
-    id = query.data
-    duration = await api_utils.get_track_info(track_id=id)
+    track_id = query.data
+    duration = await api_utils.get_track_info(track_id=track_id)
 
     if not duration:
         await query.edit_message_text(
@@ -241,26 +241,10 @@ async def save_selected_audio(
 
     user_data = context.user_data
 
+    user_data[st.TRACK_ID] = track_id
     user_data[st.FILE_DURATION] = str(duration)
     user_data[st.DURATION_LEFT_BORDER] = str(0)
     user_data[st.DURATION_RIGHT_BORDER] = str(min(60, duration))
-
-    # Get mp3 file.
-
-    url = f"{conf.AUDIO_RECEIVER_API_URL}/track/{id}/stream"
-
-    assert conf.DOWNLOAD_FOLDER is not None
-
-    file_path = await api_utils.download_track_stream(
-        url=url,
-        track_id=id,
-        save_dir=conf.DOWNLOAD_FOLDER
-    )
-
-    user_data[st.TRACK_ID] = id
-    user_data[st.TRACK_FILE_PATH] = file_path
-
-    logger.info(f'Файл загружен: {file_path}')
 
     keyboard = get_main_menu(context)
 
@@ -487,6 +471,24 @@ async def create_video_message(
     track_id = user_data[st.TRACK_ID]
 
     ERROR_MESSAGE_TO_USER = 'Ошибка, при создании кружка 😢'
+
+    # MP3 FILE DOWNLOADING.
+
+    assert conf.DOWNLOAD_FOLDER is not None
+
+    file_path = await api_utils.download_track_stream(
+        track_id=track_id,
+        save_dir=conf.DOWNLOAD_FOLDER
+    )
+
+    user_data[st.TRACK_FILE_PATH] = file_path
+
+    logger.info(f'Файл загружен: {file_path}')
+
+    video_note_processing_message += '⚙️'
+    await query.edit_message_text(
+        text=video_note_processing_message
+    )
 
     # AUDIO TRIMMING.
 

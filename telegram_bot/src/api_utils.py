@@ -105,7 +105,6 @@ async def get_track_info(
 
 
 async def download_track_stream(
-    url: str,
     track_id: str,
     save_dir: str
 ) -> str:
@@ -114,6 +113,8 @@ async def download_track_stream(
     и сохраняет в папку save_dir.
     Возвращает путь к сохранённому файлу.
     """
+
+    url = f"{conf.AUDIO_RECEIVER_API_URL}/track/{track_id}/stream"
 
     async with httpx.AsyncClient() as client:
         # Используем streaming, чтобы не держать в памяти весь файл
