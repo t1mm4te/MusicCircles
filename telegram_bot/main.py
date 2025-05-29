@@ -123,10 +123,10 @@ def main() -> None:
         # Принимает аудио или название песни и выводит кнопки для выбора опций.
         entry_points=[
             # Handler для обработки присланных аудиофайлов/голосовых.
-            MessageHandler(
-                filters.AUDIO | filters.VOICE,
-                hnd.save_audio
-            ),
+            # MessageHandler(
+            #     filters.AUDIO | filters.VOICE,
+            #     hnd.save_audio
+            # ),
 
             # Handler для обработки поиска аудиофайлов.
             selecting_song_conv_handler
