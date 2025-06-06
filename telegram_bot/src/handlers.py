@@ -39,6 +39,28 @@ async def start(
     )
 
 
+# Fallbacks command handler.
+async def restart_conversation(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    """
+    Перезапускает диалог для поиска новой песни.
+    """
+    clear_user_data(update, context)
+
+    TEXT = 'Введите название песни для поиска:'
+
+    if update.message:
+        await update.message.reply_text(TEXT)
+
+    elif update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(TEXT)
+
+    return st.TYPING_SONG_NAME
+
+
 def get_main_menu(
         context: ContextTypes.DEFAULT_TYPE
 ) -> InlineKeyboardMarkup:
@@ -62,12 +84,20 @@ def get_main_menu(
             [
                 InlineKeyboardButton(
                     time_code_message,
-                    callback_data=st.SET_TIME_CODE),
+                    callback_data=st.SET_TIME_CODE
+                ),
             ],
             [
                 InlineKeyboardButton(
                     '▶️Создать кружок',
-                    callback_data=st.CREATE_VIDEO_MESSAGE),
+                    callback_data=st.CREATE_VIDEO_MESSAGE
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 Найти новую песню",
+                    callback_data=str(st.RESTART_SEARCH)
+                ),
             ],
         ]
     )

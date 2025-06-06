@@ -41,7 +41,7 @@ def main() -> None:
     selecting_song_conv_handler = ConversationHandler(
         entry_points=[
             MessageHandler(
-                filters.TEXT,
+                filters.TEXT & ~filters.COMMAND,
                 hnd.search_audio_by_name
             )
         ],
@@ -54,12 +54,14 @@ def main() -> None:
             ],
             st.TYPING_SONG_NAME: [
                 MessageHandler(
-                    filters.TEXT,
+                    filters.TEXT & ~filters.COMMAND,
                     hnd.search_audio_by_name
                 )
             ]
         },
-        fallbacks=[],
+        fallbacks=[
+            CommandHandler('newsong', hnd.restart_conversation),
+        ],
         map_to_parent={
             ConversationHandler.END: st.CHOOSING_OPTIONS,
         }
@@ -103,9 +105,12 @@ def main() -> None:
                 ),
             ],
         },
-        fallbacks=[],
+        fallbacks=[
+            CommandHandler('newsong', hnd.restart_conversation),
+        ],
         map_to_parent={
             ConversationHandler.END: st.CHOOSING_OPTIONS,
+            st.TYPING_SONG_NAME: st.TYPING_SONG_NAME,
         }
     )
 
@@ -141,6 +146,15 @@ def main() -> None:
                     hnd.create_video_message,
                     pattern='^' + str(st.CREATE_VIDEO_MESSAGE) + '$'
                 ),
+
+                # Handler, который обрабатывает нажатие кнопки "Найти песню".
+                CallbackQueryHandler(
+                    hnd.restart_conversation,
+                    pattern='^' + str(st.RESTART_SEARCH) + '$'
+                ),
+            ],
+            st.TYPING_SONG_NAME: [
+                selecting_song_conv_handler,
             ],
         },
         # Пустышка, необходимо сделать так,
@@ -149,7 +163,8 @@ def main() -> None:
             MessageHandler(
                 filters.Regex('^Done$'),
                 hnd.done
-            )
+            ),
+            CommandHandler('newsong', hnd.restart_conversation),
         ],
     )
 
