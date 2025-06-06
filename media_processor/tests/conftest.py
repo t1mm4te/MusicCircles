@@ -8,9 +8,9 @@ import numpy as np
 import httpx # For asynchronous client
 import os
 
-# Make sure the app path is recognized
-import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Строки ниже больше не нужны, так как мы используем PYTHONPATH в Docker
+# import sys
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from main import app # Import your FastAPI app
 

@@ -1,0 +1,36 @@
+# Используем тот же базовый образ, что и в основном Dockerfile для консистентности
+FROM python:3.12.3-slim
+
+# Установка системных переменных окружения
+ENV PYTHONUNBUFFERED=1
+
+# Этап 1: Установка системных зависимостей
+# Тестам для services.py нужен ffmpeg для интеграционного теста
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Проверяем установку ffmpeg (опционально, но полезно для отладки)
+RUN ffmpeg -version
+
+# Этап 2: Установка рабочей директории и ПУТИ ДЛЯ PYTHON
+WORKDIR /app
+ENV PYTHONPATH="/app"  
+
+# Этап 3: Установка зависимостей Python
+# Сначала копируем только файл с зависимостями, чтобы использовать кэш Docker
+COPY requirements.txt .
+
+# Обновляем pip и устанавливаем зависимости
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+    
+# Этап 4: Копирование кода проекта
+# Копируем весь код, чтобы тесты могли его найти
+COPY . .
+
+# Этап 5: Команда запуска тестов
+# Запускаем pytest. Он автоматически обнаружит и выполнит все тесты в папке tests/
+# CMD ["pytest", "-v"]
+CMD ["python", "-m", "pytest", "-v"]
