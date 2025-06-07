@@ -38,6 +38,7 @@ RUN echo "Verifying FFmpeg installation:" && \
 
 # Этап 3: Установка рабочей директории
 WORKDIR /app
+ENV PYTHONPATH="/app"
 
 # Этап 4: Установка зависимостей Python
 # Сначала скопируйте файл requirements.txt
