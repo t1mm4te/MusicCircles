@@ -26,14 +26,14 @@ build() {
 }
 
 # Функция: запуск unit-тестов для media_processor
-unit_test() {
+media_processor_test() {
     echo_info "Running unit tests for media_processor..."
     docker compose run --rm media_processor pytest tests/unit
     check_command "Media processor unit tests"
 }
 
 # Функция: запуск unit-тестов для telegram_bot
-tb_test() {
+telegram_bot_test() {
     echo_info "Running unit tests for telegram_bot..."
     docker compose run --rm telegram_bot pytest tests/unit
     check_command "Telegram bot unit tests"
@@ -41,8 +41,8 @@ tb_test() {
 
 # Функция: запуск всех тестов
 test() {
-    unit_test
-    tb_test
+    media_processor_test
+    telegram_bot_test
     echo_info "All tests completed."
 }
 
@@ -75,9 +75,9 @@ help() {
     echo "Commands:"
     echo "  all         Build, test and start services (default)"
     echo "  build       Build Docker images for all services"
-    echo "  unit-test   Run unit tests for media_processor"
+    echo "  mp-test   Run unit tests for media_processor"
     echo "  tb-test     Run unit tests for telegram_bot"
-    echo "  test        Run all tests (unit-test + tb-test)"
+    echo "  test        Run all tests (mp-test + tb-test)"
     echo "  start       Start all services in background"
     echo "  stop        Stop and remove all service containers"
     echo "  help        Show this help message"
@@ -98,11 +98,11 @@ case "${1:-all}" in
     "build")
         build
         ;;
-    "unit-test")
-        unit_test
+    "mp-test")
+        media_processor_test
         ;;
     "tb-test")
-        tb_test
+        telegram_bot_test
         ;;
     "test")
         test
