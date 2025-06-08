@@ -9,10 +9,9 @@ from telegram.ext import (
 )
 
 import src.states as st
-
 import src.config as conf
-
 import src.api_utils as api_utils
+import src.database_utils as db_utils
 
 
 logger = logging.getLogger(__name__)
@@ -201,7 +200,22 @@ async def search_audio_by_name(
     assert update.message.text is not None
 
     track_name = update.message.text
-    logger.info(track_name)
+    user = update.message.from_user
+    assert user is not None
+
+    logger.info(f'User {user.id} searching for: {track_name}')
+
+    is_logged = await db_utils.log_interaction(
+        user_id=user.id,
+        username=user.username,
+        interaction_type='Поиск песни'
+    )
+
+    if not is_logged:
+        logger.error(
+            f'Не удалось залогировать взаимодействие пользователя {user.id} '
+            'при поиске песни.'
+        )
 
     tracks = await api_utils.search_for_tracks(
         track_name=track_name
@@ -486,6 +500,14 @@ async def create_video_message(
 
     query = update.callback_query
     await query.answer()
+
+    user = update.callback_query.from_user
+    await db_utils.log_interaction(
+        user_id=user.id,
+        username=user.username,
+        interaction_type='Создание видео'
+    )
+
     video_note_processing_message = (
         'Хорошо, создаю кружок...\n'
         '⚙️'
@@ -640,16 +662,6 @@ async def create_video_message(
 
     clear_user_data(update, context)
     return ConversationHandler.END
-
-
-async def done(
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """
-    Команда для остановки бота, вызов clear.
-    """
-    pass
 
 
 def clear_user_data(

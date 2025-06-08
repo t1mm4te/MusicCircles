@@ -24,3 +24,8 @@ MEDIA_PROCESSOR_API_URL = os.getenv('MEDIA_PROCESSOR_API_URL')
 if not MEDIA_PROCESSOR_API_URL:
     raise ValueError('Необходимо установить переменную окружения '
                      'MEDIA_PROCESSOR_API_URL (URL для доступа к API)')
+
+DATABASE_API_URL = os.getenv('DATABASE_API_URL')
+if not DATABASE_API_URL:
+    raise ValueError('Необходимо установить переменную окружения '
+                     'DATABASE_API_URL (URL для доступа к API)')

@@ -114,16 +114,6 @@ def main() -> None:
         }
     )
 
-    # cover_conv_handler = ConversationHandler(
-    #     entry_points=[
-
-    #     ],
-    #     states={
-
-    #     },
-    #     fallbacks=[],
-    # )
-
     main_conv_handler = ConversationHandler(
         # Принимает аудио или название песни и выводит кнопки для выбора опций.
         entry_points=[
@@ -157,13 +147,7 @@ def main() -> None:
                 selecting_song_conv_handler,
             ],
         },
-        # Пустышка, необходимо сделать так,
-        # что бы метод оставнавливал работу и чистил память.
         fallbacks=[
-            MessageHandler(
-                filters.Regex('^Done$'),
-                hnd.done
-            ),
             CommandHandler('newsong', hnd.restart_conversation),
         ],
     )
