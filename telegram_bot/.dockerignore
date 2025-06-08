@@ -1,0 +1,11 @@
+# Игнорируем окружения
+env/
+venv/
+.venv/
+
+# Git
+.git/
+.gitignore
+
+# Docker сам файл
+.dockerignore
