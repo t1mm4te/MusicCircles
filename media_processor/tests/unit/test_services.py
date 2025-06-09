@@ -170,9 +170,7 @@ def test_create_video_integration():
     image_file_io = create_dummy_image(width=1280, height=720, extension="png")
 
     video_bytes = create_video_from_audio_and_cover_files(audio_file_io, image_file_io)
-    
+
     assert video_bytes is not None
     assert len(video_bytes) > 0
-    # Простой, но эффективный способ проверить, что это похоже на mp4 файл
-    # 'ftyp' обычно в начале, 'moov' (movie atom) должен быть где-то в файле
     assert b'ftypmp42' in video_bytes[:100] or b'moov' in video_bytes

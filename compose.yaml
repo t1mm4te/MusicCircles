@@ -7,7 +7,6 @@ services:
       - "9000:9000"
     healthcheck:
       # Проверяем доступность endpoint'а документации FastAPI (/docs)
-      # Можно создать специальный /health endpoint
       test: ["CMD", "curl", "-f", "http://localhost:9000/docs"]
       interval: 10s    # Проверять каждые 10 секунд
       timeout: 5s      # Считать неудачей, если ответ не пришел за 5 секунд
