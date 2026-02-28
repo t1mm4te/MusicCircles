@@ -233,3 +233,119 @@ class TestDownloadCover:
 
         result = await download_cover("123", "/tmp/test")
         assert result == ""
+
+class TestTrimAudio:
+    """Тесты trim_audio."""
+
+    @patch("src.api_utils.httpx.AsyncClient")
+    async def test_success(self, mock_client_cls):
+        """Успешная обрезка аудио."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Создаём фейковый исходный файл
+            input_path = os.path.join(tmp_dir, "input.mp3")
+            output_path = os.path.join(tmp_dir, "output.mp3")
+            with open(input_path, "wb") as f:
+                f.write(b"fake_audio")
+
+            mock_response = MagicMock()
+            mock_response.content = b"trimmed_audio_bytes"
+            mock_response.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            result = await trim_audio(input_path, 0, 60, output_path)
+            assert result is True
+            assert os.path.exists(output_path)
+
+    @patch("src.api_utils.httpx.AsyncClient")
+    async def test_error_returns_false(self, mock_client_cls):
+        """Ошибка HTTP возвращает False."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = os.path.join(tmp_dir, "input.mp3")
+            output_path = os.path.join(tmp_dir, "output.mp3")
+            with open(input_path, "wb") as f:
+                f.write(b"fake_audio")
+
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=Exception("Server error"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            result = await trim_audio(input_path, 0, 60, output_path)
+            assert result is False
+
+
+class TestCreateVideo:
+    """Тесты create_video."""
+
+    @patch("src.api_utils.httpx.AsyncClient")
+    async def test_success(self, mock_client_cls):
+        """Успешное создание видео."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            audio_path = os.path.join(tmp_dir, "audio.mp3")
+            image_path = os.path.join(tmp_dir, "cover.jpg")
+            output_path = os.path.join(tmp_dir, "video.mp4")
+
+            with open(audio_path, "wb") as f:
+                f.write(b"fake_audio")
+            with open(image_path, "wb") as f:
+                f.write(b"fake_image")
+
+            mock_response = MagicMock()
+            mock_response.content = b"fake_video_bytes"
+            mock_response.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            result = await create_video(audio_path, image_path, output_path)
+            assert result is True
+            assert os.path.exists(output_path)
+
+    @patch("src.api_utils.httpx.AsyncClient")
+    async def test_error_returns_false(self, mock_client_cls):
+        """Ошибка возвращает False."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            audio_path = os.path.join(tmp_dir, "audio.mp3")
+            image_path = os.path.join(tmp_dir, "cover.jpg")
+            output_path = os.path.join(tmp_dir, "video.mp4")
+
+            with open(audio_path, "wb") as f:
+                f.write(b"fake_audio")
+            with open(image_path, "wb") as f:
+                f.write(b"fake_image")
+
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=Exception("Error"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            result = await create_video(audio_path, image_path, output_path)
+            assert result is False
+
+
+class TestTrackInfoNamedTuple:
+    """Тесты NamedTuple TrackInfo."""
+
+    def test_create_track_info(self):
+        """Создание TrackInfo."""
+        t = TrackInfo(id=1, title="Song", artists="Artist", duration=180)
+        assert t.id == 1
+        assert t.title == "Song"
+        assert t.artists == "Artist"
+        assert t.duration == 180
+
+    def test_track_info_immutable(self):
+        """TrackInfo является неизменяемым."""
+        t = TrackInfo(id=1, title="Song", artists="Artist", duration=180)
+        with pytest.raises(AttributeError):
+            t.id = 2
