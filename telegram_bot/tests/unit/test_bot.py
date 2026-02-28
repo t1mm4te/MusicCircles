@@ -51,14 +51,14 @@ def mock_audio_message(mock_user, mock_chat):
         mime_type="audio/mpeg",
         file_size=5000000
     )
-    
+
     message = MagicMock(spec=Message)
     message.from_user = mock_user
     message.chat = mock_chat
     message.audio = audio
     message.voice = None
     message.reply_text = AsyncMock()
-    
+
     return message
 
 
@@ -70,7 +70,7 @@ def mock_text_message(mock_user, mock_chat):
     message.chat = mock_chat
     message.text = "Test Song Name"
     message.reply_text = AsyncMock()
-    
+
     return message
 
 
@@ -102,12 +102,12 @@ def mock_callback_query(mock_user, mock_chat):
     query.data = "test_callback_data"
     query.answer = AsyncMock()
     query.edit_message_text = AsyncMock()
-    
+
     # Создаем мок сообщения для callback query
     message = MagicMock(spec=Message)
     message.chat = mock_chat
     query.message = message
-    
+
     return query
 
 
@@ -122,19 +122,15 @@ def mock_update_with_callback(mock_callback_query):
 
 
 class TestBotIntegration:
-    """Интеграционные тесты для телеграм бота."""
 
     @pytest.mark.asyncio
     async def test_start_command_flow(self, mock_update_with_text, mock_context):
         """Тест команды /start."""
-        # Arrange
         update = mock_update_with_text
         context = mock_context
-        
-        # Act
+
         result = await handlers.start(update, context)
-        
-        # Assert
+
         assert result is None
         update.message.reply_text.assert_called_once()
         call_args = update.message.reply_text.call_args[0][0]
@@ -145,21 +141,20 @@ class TestBotIntegration:
     @patch('src.api_utils.search_for_tracks')
     async def test_search_audio_by_name_success(self, mock_search, mock_update_with_text, mock_context):
         """Тест успешного поиска песни по названию."""
-        # Arrange
         from src.api_utils import TrackInfo
         mock_tracks = [
-            TrackInfo(id=1, title="Test Song", artists="Test Artist", duration=180),
-            TrackInfo(id=2, title="Another Song", artists="Another Artist", duration=200)
+            TrackInfo(id=1, title="Test Song",
+                      artists="Test Artist", duration=180),
+            TrackInfo(id=2, title="Another Song",
+                      artists="Another Artist", duration=200)
         ]
         mock_search.return_value = mock_tracks
-        
+
         update = mock_update_with_text
         context = mock_context
-        
-        # Act
+
         result = await handlers.search_audio_by_name(update, context)
-        
-        # Assert
+
         assert result == st.SELECTING_SONG
         update.message.reply_text.assert_called_once()
         call_args = update.message.reply_text.call_args
@@ -170,16 +165,13 @@ class TestBotIntegration:
     @patch('src.api_utils.search_for_tracks')
     async def test_search_audio_by_name_no_results(self, mock_search, mock_update_with_text, mock_context):
         """Тест поиска песни без результатов."""
-        # Arrange
         mock_search.return_value = []
-        
+
         update = mock_update_with_text
         context = mock_context
-        
-        # Act
+
         result = await handlers.search_audio_by_name(update, context)
-        
-        # Assert
+
         assert result is None
         update.message.reply_text.assert_called_once()
         call_args = update.message.reply_text.call_args[0][0]
@@ -189,16 +181,13 @@ class TestBotIntegration:
     @patch('src.api_utils.search_for_tracks')
     async def test_search_audio_by_name_api_error(self, mock_search, mock_update_with_text, mock_context):
         """Тест ошибки API при поиске песни."""
-        # Arrange
         mock_search.return_value = None
-        
+
         update = mock_update_with_text
         context = mock_context
-        
-        # Act
+
         result = await handlers.search_audio_by_name(update, context)
-        
-        # Assert
+
         assert result is None
         update.message.reply_text.assert_called_once()
         call_args = update.message.reply_text.call_args[0][0]
@@ -208,41 +197,35 @@ class TestBotIntegration:
     @patch('src.api_utils.get_track_info')
     async def test_save_selected_audio_success(self, mock_get_info, mock_update_with_callback, mock_context):
         """Тест успешного сохранения выбранной песни."""
-        # Arrange
         mock_get_info.return_value = 180  # duration in seconds
-        
+
         update = mock_update_with_callback
         update.callback_query.data = "123"
         context = mock_context
-        
-        # Act
+
         result = await handlers.save_selected_audio(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.TRACK_ID] == "123"
         assert context.user_data[st.FILE_DURATION] == "180"
         assert context.user_data[st.DURATION_LEFT_BORDER] == "0"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"  # min(60, 180)
-        
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"
+
         update.callback_query.edit_message_text.assert_called_once()
 
     @pytest.mark.asyncio
     @patch('src.api_utils.get_track_info')
     async def test_save_selected_audio_api_error(self, mock_get_info, mock_update_with_callback, mock_context):
         """Тест ошибки API при получении информации о треке."""
-        # Arrange
         mock_get_info.return_value = None
-        
+
         update = mock_update_with_callback
         update.callback_query.data = "123"
         context = mock_context
-        
-        # Act
+
         result = await handlers.save_selected_audio(update, context)
-        
-        # Assert
+
         assert result == st.TYPING_SONG_NAME
         update.callback_query.edit_message_text.assert_called_once()
         call_args = update.callback_query.edit_message_text.call_args[0][0]
@@ -251,15 +234,13 @@ class TestBotIntegration:
     @pytest.mark.asyncio
     async def test_print_time_codes(self, mock_update_with_callback, mock_context):
         """Тест показа меню установки времени."""
-        # Arrange
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data[st.FILE_DURATION] = "120"
-        
-        # Act
+
         result = await handlers.print_time_codes(update, context)
-        
-        # Assert
+
         assert result == st.SELECTING_ACTION
         update.callback_query.edit_message_text.assert_called_once()
         call_args = update.callback_query.edit_message_text.call_args
@@ -269,95 +250,85 @@ class TestBotIntegration:
     @pytest.mark.asyncio
     async def test_set_start_time(self, mock_update_with_callback, mock_context):
         """Тест установки времени с начала."""
-        # Arrange
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data[st.FILE_DURATION] = "120"
-        
-        # Act
+
         result = await handlers.set_start_time(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.DURATION_LEFT_BORDER] == "0"
         assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"
-        
+
         update.callback_query.edit_message_text.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_set_custom_time_single_value(self, mock_update_with_text, mock_context):
         """Тест установки пользовательского времени (одно значение)."""
-        # Arrange
+
         update = mock_update_with_text
         update.message.text = "30"
         context = mock_context
         context.user_data[st.FILE_DURATION] = "120"
-        
-        # Act
+
         result = await handlers.set_custom_time(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.DURATION_LEFT_BORDER] == "30"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "90"  # 30 + 60
-        
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "90"
+
         update.message.reply_text.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_set_custom_time_two_values(self, mock_update_with_text, mock_context):
         """Тест установки пользовательского времени (два значения)."""
-        # Arrange
+
         update = mock_update_with_text
         update.message.text = "30 90"
         context = mock_context
         context.user_data[st.FILE_DURATION] = "120"
-        
-        # Act
+
         result = await handlers.set_custom_time(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.DURATION_LEFT_BORDER] == "30"
         assert context.user_data[st.DURATION_RIGHT_BORDER] == "90"
-        
+
         update.message.reply_text.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_set_custom_time_mm_ss_format(self, mock_update_with_text, mock_context):
         """Тест установки времени в формате мм:сс."""
-        # Arrange
+
         update = mock_update_with_text
         update.message.text = "1:30 2:00"
         context = mock_context
         context.user_data[st.FILE_DURATION] = "180"
-        
-        # Act
+
         result = await handlers.set_custom_time(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
-        assert context.user_data[st.DURATION_LEFT_BORDER] == "90"  # 1:30 = 90 sec
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "120"  # 2:00 = 120 sec
-        
+        assert context.user_data[st.DURATION_LEFT_BORDER] == "90"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "120"
+
         update.message.reply_text.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_back_to_menu(self, mock_update_with_callback, mock_context):
         """Тест возврата в главное меню."""
-        # Arrange
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data[st.DURATION_LEFT_BORDER] = "0"
         context.user_data[st.DURATION_RIGHT_BORDER] = "60"
-        
-        # Act
+
         result = await handlers.back_to_menu(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         update.callback_query.edit_message_text.assert_called_once()
@@ -368,15 +339,13 @@ class TestBotIntegration:
     @pytest.mark.asyncio
     async def test_restart_conversation_from_message(self, mock_update_with_text, mock_context):
         """Тест перезапуска разговора из сообщения."""
-        # Arrange
+
         update = mock_update_with_text
         context = mock_context
         context.user_data['some_data'] = 'test'
-        
-        # Act
+
         result = await handlers.restart_conversation(update, context)
-        
-        # Assert
+
         assert result == st.TYPING_SONG_NAME
         assert context.user_data == {}
         update.message.reply_text.assert_called_once()
@@ -386,15 +355,13 @@ class TestBotIntegration:
     @pytest.mark.asyncio
     async def test_restart_conversation_from_callback(self, mock_update_with_callback, mock_context):
         """Тест перезапуска разговора из callback query."""
-        # Arrange
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data['some_data'] = 'test'
-        
-        # Act
+
         result = await handlers.restart_conversation(update, context)
-        
-        # Assert
+
         assert result == st.TYPING_SONG_NAME
         assert context.user_data == {}
         update.callback_query.edit_message_text.assert_called_once()
@@ -404,25 +371,20 @@ class TestBotIntegration:
     @pytest.mark.asyncio
     async def test_get_main_menu(self, mock_context):
         """Тест генерации главного меню."""
-        # Arrange
+
         context = mock_context
         context.user_data[st.DURATION_LEFT_BORDER] = "10"
         context.user_data[st.DURATION_RIGHT_BORDER] = "70"
-        
-        # Act
+
         keyboard = handlers.get_main_menu(context)
-        
-        # Assert
+
         assert keyboard is not None
-        # Проверяем, что клавиатура содержит ожидаемые кнопки
         inline_keyboard = keyboard.inline_keyboard
-        assert len(inline_keyboard) == 3  # Три ряда кнопок
-        
-        # Проверяем текст первой кнопки (время)
+        assert len(inline_keyboard) == 3
+
         first_button_text = inline_keyboard[0][0].text
         assert "с 10с по 70с" in first_button_text
-        
-        # Проверяем callback_data кнопок
+
         assert inline_keyboard[0][0].callback_data == st.SET_TIME_CODE
         assert inline_keyboard[1][0].callback_data == st.CREATE_VIDEO_MESSAGE
         assert inline_keyboard[2][0].callback_data == str(st.RESTART_SEARCH)
@@ -449,50 +411,44 @@ class TestBotIntegration:
     @pytest.mark.asyncio
     async def test_clear_user_data_with_file(self, mock_update_with_text, mock_context):
         """Тест очистки данных пользователя с удалением файла."""
-        # Arrange
+
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_file.write(b"test content")
             temp_file_path = temp_file.name
-        
+
         update = mock_update_with_text
         context = mock_context
         context.user_data[st.TRACK_FILE_PATH] = temp_file_path
         context.user_data['other_data'] = 'test'
-        
-        # Act
+
         handlers.clear_user_data(update, context)
-        
-        # Assert
+
         assert context.user_data == {}
-        assert not os.path.exists(temp_file_path)  # Файл должен быть удален
+        assert not os.path.exists(temp_file_path)
 
     @pytest.mark.asyncio
     async def test_clear_user_data_file_not_exists(self, mock_update_with_text, mock_context):
         """Тест очистки данных пользователя когда файл не существует."""
-        # Arrange
+
         update = mock_update_with_text
         context = mock_context
         context.user_data[st.TRACK_FILE_PATH] = "/nonexistent/file.mp3"
         context.user_data['other_data'] = 'test'
-        
-        # Act
+
         handlers.clear_user_data(update, context)
-        
-        # Assert
+
         assert context.user_data == {}
 
     @pytest.mark.asyncio
     async def test_clear_user_data_from_callback(self, mock_update_with_callback, mock_context):
         """Тест очистки данных пользователя из callback query."""
-        # Arrange
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data['test_data'] = 'test'
-        
-        # Act
+
         handlers.clear_user_data(update, context)
-        
-        # Assert
+
         assert context.user_data == {}
 
 
@@ -507,8 +463,8 @@ class TestCreateVideoIntegration:
     @patch('builtins.open')
     @patch('os.path.exists')
     @patch('os.listdir')
-    @patch('os.remove')  # Мокаем os.remove
-    @patch('os.makedirs')  # Мокаем os.makedirs
+    @patch('os.remove')
+    @patch('os.makedirs')
     async def test_create_video_message_success(
         self,
         mock_makedirs,
@@ -524,34 +480,30 @@ class TestCreateVideoIntegration:
         mock_context
     ):
         """Тест успешного создания видео-кружка."""
-        # Arrange
+
         mock_download_stream.return_value = "/tmp/test_track.mp3"
         mock_trim_audio.return_value = True
         mock_download_cover.return_value = "/tmp/test_cover.jpg"
         mock_create_video.return_value = True
         mock_exists.return_value = True
         mock_listdir.return_value = ["video_test_track.mp4"]
-        
-        # Мокаем чтение файла
+
         mock_file_content = b"fake_video_content"
         mock_file = MagicMock()
         mock_file.__enter__.return_value.read.return_value = mock_file_content
         mock_open.return_value = mock_file
-        
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data[st.TRACK_ID] = "test_track"
         context.user_data[st.DURATION_LEFT_BORDER] = "10"
         context.user_data[st.DURATION_RIGHT_BORDER] = "70"
-        
-        # Act
+
         result = await handlers.create_video_message(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
-        
-        # Проверяем, что все API вызовы были сделаны
+
         mock_download_stream.assert_called_once_with(
             track_id="test_track",
             save_dir=conf.DOWNLOAD_FOLDER
@@ -562,14 +514,13 @@ class TestCreateVideoIntegration:
             save_dir=conf.DOWNLOAD_FOLDER
         )
         mock_create_video.assert_called_once()
-        
-        # Проверяем, что видео было отправлено
+
         context.bot.send_video_note.assert_called_once()
 
     @pytest.mark.asyncio
     @patch('src.api_utils.download_track_stream')
     @patch('src.api_utils.trim_audio')
-    @patch('os.remove')  # Мокаем os.remove
+    @patch('os.remove')
     async def test_create_video_message_trim_error(
         self,
         mock_remove,
@@ -579,31 +530,27 @@ class TestCreateVideoIntegration:
         mock_context
     ):
         """Тест ошибки при обрезке аудио."""
-        # Arrange
+
         mock_download_stream.return_value = "/tmp/test_track.mp3"
-        mock_trim_audio.return_value = False  # Ошибка обрезки
-        
+        mock_trim_audio.return_value = False
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data[st.TRACK_ID] = "test_track"
         context.user_data[st.DURATION_LEFT_BORDER] = "10"
         context.user_data[st.DURATION_RIGHT_BORDER] = "70"
-        
-        # Act
+
         result = await handlers.create_video_message(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
-        
-        # Проверяем, что сообщение об ошибке было отправлено
+
         update.callback_query.edit_message_text.assert_called()
-        # Исправляем проверку аргументов
         call_args = update.callback_query.edit_message_text.call_args
         assert call_args is not None
-        if call_args[0]:  # Позиционные аргументы
+        if call_args[0]:
             assert "Ошибка, при создании кружка" in call_args[0][0]
-        elif call_args[1].get('text'):  # Именованные аргументы
+        elif call_args[1].get('text'):
             assert "Ошибка, при создании кружка" in call_args[1]['text']
 
     @pytest.mark.asyncio
@@ -613,7 +560,7 @@ class TestCreateVideoIntegration:
     @patch('src.api_utils.create_video')
     @patch('os.path.exists')
     @patch('os.listdir')
-    @patch('os.remove')  # Мокаем os.remove
+    @patch('os.remove')
     async def test_create_video_message_video_not_found(
         self,
         mock_remove,
@@ -627,41 +574,29 @@ class TestCreateVideoIntegration:
         mock_context
     ):
         """Тест случая, когда видеофайл не найден."""
-        # Arrange
+
         mock_download_stream.return_value = "/tmp/test_track.mp3"
         mock_trim_audio.return_value = True
         mock_download_cover.return_value = "/tmp/test_cover.jpg"
         mock_create_video.return_value = True
-        mock_exists.return_value = False  # Файл не найден
-        mock_listdir.return_value = []  # Мокаем os.listdir
-        
+        mock_exists.return_value = False
+        mock_listdir.return_value = []
+
         update = mock_update_with_callback
         context = mock_context
         context.user_data[st.TRACK_ID] = "test_track"
         context.user_data[st.DURATION_LEFT_BORDER] = "10"
         context.user_data[st.DURATION_RIGHT_BORDER] = "70"
-        
-        # Act
+
         result = await handlers.create_video_message(update, context)
-        
-        # Assert
+
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
-        
-        # Проверяем, что сообщение об ошибке было отправлено
+
         update.callback_query.edit_message_text.assert_called()
         call_args = update.callback_query.edit_message_text.call_args
         assert call_args is not None
-        if call_args[0]:  # Позиционные аргументы
+        if call_args[0]:
             assert "Ошибка, при создании кружка" in call_args[0][0]
-        elif call_args[1].get('text'):  # Именованные аргументы
+        elif call_args[1].get('text'):
             assert "Ошибка, при создании кружка" in call_args[1]['text']
-
-
-# Для полного покрытия интеграционных тестов
-@pytest.mark.asyncio
-async def test_full_conversation_flow():
-    """Интеграционный тест полного флоу разговора."""
-    # Этот тест можно расширить для проверки полного цикла взаимодействия
-    # от поиска песни до создания видео
-    pass
