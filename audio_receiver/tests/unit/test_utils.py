@@ -1,4 +1,3 @@
-"""Тесты для audio_receiver/audio_receiver_utils.py — утилиты Yandex Music."""
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import audio_receiver_utils as utils
@@ -153,3 +152,117 @@ class TestGetTrackBytes:
 
         result = await utils.get_track_bytes(mock_track)
         assert result is None
+
+    async def test_download_bytes_error(self):
+        """Ошибка при скачивании байтов трека."""
+        mock_track = MagicMock()
+        mock_download_info = MagicMock()
+        mock_download_info.codec = "mp3"
+        mock_download_info.bitrate_in_kbps = 320
+
+        mock_track.get_download_info_async = AsyncMock(return_value=[mock_download_info])
+        mock_track.download_bytes_async = AsyncMock(side_effect=Exception("Download failed"))
+
+        with pytest.raises(Exception, match="Download failed"):
+            await utils.get_track_bytes(mock_track)
+
+    async def test_selects_first_download_info(self):
+        """Используется первый элемент из списка download_info."""
+        mock_track = MagicMock()
+        info_1 = MagicMock(codec="aac", bitrate_in_kbps=128)
+        info_2 = MagicMock(codec="mp3", bitrate_in_kbps=320)
+
+        mock_track.get_download_info_async = AsyncMock(return_value=[info_1, info_2])
+        mock_track.download_bytes_async = AsyncMock(return_value=b"data")
+
+        await utils.get_track_bytes(mock_track)
+        mock_track.download_bytes_async.assert_called_once_with("aac", 128)
+
+
+class TestFindTracksByNameExtra:
+    """Дополнительные тесты find_tracks_by_name."""
+
+    async def test_multiple_tracks_returned(self):
+        """Возвращается несколько треков."""
+        mock_track1 = MagicMock(id=1, title="Song A")
+        mock_track2 = MagicMock(id=2, title="Song B")
+        mock_track3 = MagicMock(id=3, title="Song C")
+
+        mock_tracks_result = MagicMock()
+        mock_tracks_result.results = [mock_track1, mock_track2, mock_track3]
+
+        mock_search_result = MagicMock()
+        mock_search_result.tracks = mock_tracks_result
+
+        mock_client = AsyncMock()
+        mock_client.search = AsyncMock(return_value=mock_search_result)
+        utils.client = mock_client
+
+        result = await utils.find_tracks_by_name("popular")
+        assert len(result) == 3
+        assert result[1].title == "Song B"
+
+    async def test_special_characters_in_query(self):
+        """Поиск со спецсимволами в запросе."""
+        mock_tracks_result = MagicMock()
+        mock_tracks_result.results = []
+
+        mock_search_result = MagicMock()
+        mock_search_result.tracks = mock_tracks_result
+
+        mock_client = AsyncMock()
+        mock_client.search = AsyncMock(return_value=mock_search_result)
+        utils.client = mock_client
+
+        query = "трек & <special> символы!?"
+        result = await utils.find_tracks_by_name(query)
+        mock_client.search.assert_called_once_with(query, type_="track")
+        assert result == []
+
+
+class TestGetTrackInfoExtra:
+    """Дополнительные тесты get_track_info."""
+
+    async def test_string_track_id(self):
+        """Получение трека по строковому ID."""
+        mock_track = MagicMock(title="String ID Track")
+
+        mock_client = AsyncMock()
+        mock_client.tracks = AsyncMock(return_value=[mock_track])
+        utils.client = mock_client
+
+        result = await utils.get_track_info("abc123")
+        assert result.title == "String ID Track"
+        mock_client.tracks.assert_called_once_with("abc123")
+
+    async def test_api_error(self):
+        """Ошибка API при получении информации о треке."""
+        mock_client = AsyncMock()
+        mock_client.tracks = AsyncMock(side_effect=Exception("Network error"))
+        utils.client = mock_client
+
+        with pytest.raises(Exception, match="Network error"):
+            await utils.get_track_info(12345)
+
+
+class TestGetTrackCoverExtra:
+    """Дополнительные тесты get_track_cover."""
+
+    async def test_cover_download_error(self):
+        """Ошибка при скачивании обложки."""
+        mock_track = MagicMock()
+        mock_track.download_cover_bytes_async = AsyncMock(
+            side_effect=Exception("Cover not available")
+        )
+
+        with pytest.raises(Exception, match="Cover not available"):
+            await utils.get_track_cover(mock_track)
+
+    async def test_cover_returns_empty_bytes(self):
+        """Обложка возвращает пустые байты."""
+        mock_track = MagicMock()
+        mock_track.download_cover_bytes_async = AsyncMock(return_value=b"")
+
+        result = await utils.get_track_cover(mock_track)
+        assert result == b""
+        mock_track.download_cover_bytes_async.assert_called_once_with(size="200x200")
