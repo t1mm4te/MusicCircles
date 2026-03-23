@@ -1,72 +1,97 @@
-# tests/unit/test_services.py
 import pytest
 import io
 from PIL import Image
 from pydub import AudioSegment
 import os
 import uuid
-import tempfile 
+import tempfile
 from unittest.mock import patch, ANY, call
 
-# Импортируем тестируемые функции
+# тестируемые функции
 from app.services import trim_audio, crop_to_square, create_video_from_audio_and_cover_files
-# Импортируем фикстуры и хелперы для создания тестовых данных
-from tests.conftest import create_dummy_audio, create_dummy_image, dummy_wav_audio_bytes_10s, dummy_mp3_audio_bytes_5s
+# фикстуры для создания тестовых данных
+from tests.conftest import (
+    create_dummy_audio,
+    create_dummy_image,
+    dummy_wav_audio_bytes_10s,
+    dummy_mp3_audio_bytes_5s
+)
 
-# --- Тесты для trim_audio ---
 
+# Тесты для trim_audio
 @pytest.mark.asyncio
 async def test_trim_audio_valid(dummy_wav_audio_bytes_10s):
     start_time_sec = 2
     end_time_sec = 5
     expected_duration_ms = (end_time_sec - start_time_sec) * 1000
 
-    trimmed_buffer = await trim_audio(dummy_wav_audio_bytes_10s, start_time_sec, end_time_sec)
+    trimmed_buffer = await trim_audio(
+        dummy_wav_audio_bytes_10s,
+        start_time_sec,
+        end_time_sec
+    )
     trimmed_buffer.seek(0)
-    
+
     # Убедимся, что буфер не пустой
     assert trimmed_buffer.getbuffer().nbytes > 0
-    
+
     trimmed_segment = AudioSegment.from_file(trimmed_buffer, format="mp3")
     assert trimmed_segment is not None
     # Проверяем длительность с небольшой погрешностью из-за особенностей кодирования
-    assert abs(len(trimmed_segment) - expected_duration_ms) < 100 
+    assert abs(len(trimmed_segment) - expected_duration_ms) < 100
     assert trimmed_segment.frame_rate > 0
 
+
+# обрезка целиком (без обрезки)
 @pytest.mark.asyncio
 async def test_trim_audio_full_length(dummy_mp3_audio_bytes_5s):
-    audio_segment = AudioSegment.from_file(io.BytesIO(dummy_mp3_audio_bytes_5s))
+    audio_segment = AudioSegment.from_file(
+        io.BytesIO(dummy_mp3_audio_bytes_5s)
+    )
     original_duration_ms = len(audio_segment)
 
-    trimmed_buffer = await trim_audio(dummy_mp3_audio_bytes_5s, 0, int(original_duration_ms / 1000))
+    trimmed_buffer = await trim_audio(
+        dummy_mp3_audio_bytes_5s, 0, int(original_duration_ms / 1000)
+    )
     trimmed_buffer.seek(0)
-    
+
     trimmed_segment = AudioSegment.from_file(trimmed_buffer, format="mp3")
     assert abs(len(trimmed_segment) - original_duration_ms) < 100
 
-# --- Тесты для crop_to_square ---
 
+@pytest.mark.asyncio
+async def test_trim_audio_exception_handling(non_audio_bytes):
+    """Тестирует обработку исключений внутри trim_audio."""
+    trimmed_buffer = await trim_audio(non_audio_bytes, 0, 5)
+
+    # Проверяем, что возвращен пустой буфер (0 байт)
+    assert trimmed_buffer.getbuffer().nbytes == 0
+
+
+# Тесты crop_to_square
 def test_crop_to_square_already_square():
     image_bytes_io = create_dummy_image(width=100, height=100, extension="png")
-    
+
     cropped_buffer = crop_to_square(image_bytes_io)
     cropped_buffer.seek(0)
     img = Image.open(cropped_buffer)
 
-    assert img.width == 100
-    assert img.height == 100
-    assert img.format == "PNG" # Функция сохраняет в PNG
-
-def test_crop_to_square_landscape():
-    image_bytes_io = create_dummy_image(width=200, height=100, extension="jpeg")
-    
-    cropped_buffer = crop_to_square(image_bytes_io)
-    cropped_buffer.seek(0)
-    img = Image.open(cropped_buffer)
-    
     assert img.width == 100
     assert img.height == 100
     assert img.format == "PNG"
+
+
+def test_crop_to_square_landscape():
+    image_bytes_io = create_dummy_image(width=200, height=100, extension="jpeg")
+
+    cropped_buffer = crop_to_square(image_bytes_io)
+    cropped_buffer.seek(0)
+    img = Image.open(cropped_buffer)
+
+    assert img.width == 100
+    assert img.height == 100
+    assert img.format == "PNG"
+
 
 def test_crop_to_square_portrait():
     image_bytes_io = create_dummy_image(width=100, height=200, extension="png")
@@ -79,8 +104,9 @@ def test_crop_to_square_portrait():
     assert img.height == 100
     assert img.format == "PNG"
 
+
 def test_crop_to_square_resizes_large_image():
-    # Тестируем, что изображение > 640px будет уменьшено до 640x640
+    # Тестируем, что изображение больше 640px будет уменьшено до 640x640
     image_bytes_io = create_dummy_image(width=1000, height=800, extension="png")
 
     cropped_buffer = crop_to_square(image_bytes_io)
@@ -91,11 +117,19 @@ def test_crop_to_square_resizes_large_image():
     assert img.height == 640
     assert img.format == "PNG"
 
-# --- Тесты для create_video_from_audio_and_cover_files ---
+# Тесты для create_video_from_audio_and_cover_files
 @patch('app.services.ffmpeg.probe')
 @patch('app.services.os.remove')
 @patch('app.services.ffmpeg.run')
-@patch('app.services.uuid.uuid4', side_effect=['uuid-audio', 'uuid-audio-conv', 'uuid-image', 'uuid-video'])
+@patch(
+    'app.services.uuid.uuid4',
+    side_effect=[
+        'uuid-audio',
+        'uuid-audio-conv',
+        'uuid-image',
+        'uuid-video'
+    ]
+)
 def test_create_video_mocked(
     mock_uuid,
     mock_ffmpeg_run,
@@ -115,7 +149,7 @@ def test_create_video_mocked(
         # stream.get_args() возвращает всю команду в виде списка.
         # Имя выходного файла - это последний позиционный аргумент.
         args = stream.get_args()
-        
+
         # Ищем последний аргумент, который выглядит как путь к файлу
         # (не начинается с '-' и содержит расширение)
         output_filename = None
@@ -123,7 +157,7 @@ def test_create_video_mocked(
             if not arg.startswith('-') and ('/' in arg or '\\' in arg):
                 output_filename = arg
                 break
-        
+
         if not output_filename:
             raise ValueError(f"Не удалось найти имя выходного файла в аргументах ffmpeg: {args}")
 
@@ -166,15 +200,6 @@ def test_create_video_integration():
     assert len(video_bytes) > 0
     assert b'ftypmp42' in video_bytes[:100] or b'moov' in video_bytes
 
-@pytest.mark.asyncio
-async def test_trim_audio_exception_handling(non_audio_bytes):
-    """Тестирует обработку исключений внутри trim_audio."""
-    # non_audio_bytes берется из фикстуры в conftest.py
-    trimmed_buffer = await trim_audio(non_audio_bytes, 0, 5)
-
-    # Проверяем, что возвращен пустой буфер (0 байт)
-    assert trimmed_buffer.getbuffer().nbytes == 0
-
 
 def test_crop_to_square_small_image_no_resize():
     """Тестирует, что небольшое изображение 
@@ -192,7 +217,8 @@ def test_crop_to_square_small_image_no_resize():
 
 def test_crop_to_square_exception_handling(non_image_bytes):
     """Тестирует обработку исключений внутри crop_to_square."""
-    # Оборачиваем невалидные байты из conftest.py в BytesIO, т.к. функция ожидает BinaryIO
+    # Оборачиваем невалидные байты из conftest.py в BytesIO,
+    # т.к. функция ожидает BinaryIO
     invalid_io = io.BytesIO(non_image_bytes)
     cropped_buffer = crop_to_square(invalid_io)
     # Проверяем, что возвращен пустой буфер (0 байт)

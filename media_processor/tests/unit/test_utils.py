@@ -1,8 +1,7 @@
-# tests/unit/test_utils.py
 import pytest
 from fastapi import HTTPException, UploadFile
 import io
-from unittest.mock import MagicMock, AsyncMock # <--- IMPORT AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 
 from app.utils import (
     validate_image_content,
@@ -12,57 +11,86 @@ from app.utils import (
 )
 from pydub import AudioSegment
 
-# --- Tests for validate_image_content ---
+
+# Tests for validate_image_content
+# Проверка - загруженный файл является картинкой?
 @pytest.mark.asyncio
 async def test_validate_image_content_valid_png(dummy_png_image_bytes):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=dummy_png_image_bytes) # <--- USE AsyncMock
+    mock_file.read = AsyncMock(return_value=dummy_png_image_bytes)
     content = await validate_image_content(mock_file)
     assert content == dummy_png_image_bytes
+
 
 @pytest.mark.asyncio
 async def test_validate_image_content_valid_jpg(dummy_jpg_image_bytes):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=dummy_jpg_image_bytes) # <--- USE AsyncMock
+    mock_file.read = AsyncMock(return_value=dummy_jpg_image_bytes)
     content = await validate_image_content(mock_file)
     assert content == dummy_jpg_image_bytes
 
+
+# Проверка падения при не валидных данных
 @pytest.mark.asyncio
 async def test_validate_image_content_invalid(non_image_bytes):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=non_image_bytes) # <--- USE AsyncMock
+    mock_file.read = AsyncMock(return_value=non_image_bytes)
     with pytest.raises(HTTPException) as exc_info:
         await validate_image_content(mock_file)
     assert exc_info.value.status_code == 400
     assert "Не удалось обработать файл как изображение" in exc_info.value.detail
 
-# --- Tests for validate_audio_content ---
+
+# Tests for validate_audio_content
+# Проверка - загруженный файл является аудио файлом?
 @pytest.mark.asyncio
 async def test_validate_audio_content_valid_mp3(dummy_mp3_audio_bytes_5s):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=dummy_mp3_audio_bytes_5s) # <--- USE AsyncMock
+    mock_file.read = AsyncMock(return_value=dummy_mp3_audio_bytes_5s)
     content = await validate_audio_content(mock_file)
     assert content == dummy_mp3_audio_bytes_5s
+
 
 @pytest.mark.asyncio
 async def test_validate_audio_content_valid_wav(dummy_wav_audio_bytes_10s):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=dummy_wav_audio_bytes_10s) # <--- USE AsyncMock
+    mock_file.read = AsyncMock(return_value=dummy_wav_audio_bytes_10s)
     content = await validate_audio_content(mock_file)
     assert content == dummy_wav_audio_bytes_10s
+
 
 @pytest.mark.asyncio
 async def test_validate_audio_content_invalid(non_audio_bytes):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=non_audio_bytes) # <--- USE AsyncMock
+    mock_file.read = AsyncMock(return_value=non_audio_bytes)
     with pytest.raises(HTTPException) as exc_info:
         await validate_audio_content(mock_file)
     assert exc_info.value.status_code == 400
     assert "Файл не является поддерживаемым аудиоформатом" in exc_info.value.detail
 
-# --- Tests for validate_audio_range ---
+
+# Tests for validate_audio_range
 def test_validate_audio_range_valid():
     validate_audio_range(start=0, end=10)
+
+
+def test_validate_audio_range_valid_54_seconds():
+    # Внутри границы
+    validate_audio_range(start=0, end=54)
+
+
+def test_validate_audio_range_valid_55_seconds():
+    # Ровно на границе
+    validate_audio_range(start=10, end=65)
+
+
+def test_validate_audio_range_invalid_56_seconds():
+    # Выход за границу
+    with pytest.raises(HTTPException) as exc_info:
+        validate_audio_range(start=0, end=56)
+    assert exc_info.value.status_code == 400
+    assert "Длительность фрагмента не может превышать 55 секунд" in exc_info.value.detail
+
 
 def test_validate_audio_range_start_negative():
     with pytest.raises(HTTPException) as exc_info:
@@ -70,11 +98,13 @@ def test_validate_audio_range_start_negative():
     assert exc_info.value.status_code == 400
     assert "Параметры времени не могут быть отрицательными" in exc_info.value.detail
 
+
 def test_validate_audio_range_end_negative():
     with pytest.raises(HTTPException) as exc_info:
         validate_audio_range(start=0, end=-5)
     assert exc_info.value.status_code == 400
     assert "Параметры времени не могут быть отрицательными" in exc_info.value.detail
+
 
 def test_validate_audio_range_start_ge_end():
     with pytest.raises(HTTPException) as exc_info:
@@ -86,16 +116,26 @@ def test_validate_audio_range_start_ge_end():
     assert exc_info.value.status_code == 400
     assert "Параметр start должен быть меньше end" in exc_info.value.detail
 
-# --- Tests for validate_audio_duration ---
+
+# Tests for validate_audio_duration
 def test_validate_audio_duration_valid(dummy_mp3_audio_bytes_5s):
     validate_audio_duration(dummy_mp3_audio_bytes_5s, start=1, end=4)
+
 
 def test_validate_audio_duration_start_exceeds(dummy_mp3_audio_bytes_5s):
     with pytest.raises(HTTPException) as exc_info:
         validate_audio_duration(dummy_mp3_audio_bytes_5s, start=6, end=7)
     assert exc_info.value.status_code == 400
+
+
+def test_validate_audio_duration_exceeds_real_length(dummy_mp3_audio_bytes_80s):
+    with pytest.raises(HTTPException) as exc_info:
+        validate_audio_duration(dummy_mp3_audio_bytes_80s, start=10, end=90)
+    assert exc_info.value.status_code == 400
+    assert "не должны превышать длительность аудио" in exc_info.value.detail
     assert "Параметры start и end не должны превышать длительность аудио" in exc_info.value.detail
-    assert "(5.00 сек)" in exc_info.value.detail
+    assert "(80.00 сек)" in exc_info.value.detail
+
 
 def test_validate_audio_duration_end_exceeds(dummy_mp3_audio_bytes_5s):
     with pytest.raises(HTTPException) as exc_info:
@@ -103,6 +143,7 @@ def test_validate_audio_duration_end_exceeds(dummy_mp3_audio_bytes_5s):
     assert exc_info.value.status_code == 400
     assert "Параметры start и end не должны превышать длительность аудио" in exc_info.value.detail
     assert "(5.00 сек)" in exc_info.value.detail
+
 
 def test_validate_audio_duration_bad_audio_content(non_audio_bytes):
     with pytest.raises(HTTPException) as exc_info:

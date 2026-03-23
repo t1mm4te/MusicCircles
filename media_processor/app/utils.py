@@ -46,6 +46,8 @@ def validate_audio_range(start: int, end: int):
         raise HTTPException(status_code=400, detail="Параметры времени не могут быть отрицательными")
     if start >= end:
         raise HTTPException(status_code=400, detail="Параметр start должен быть меньше end")
+    if end - start > 55:
+        raise HTTPException(status_code=400, detail="Длительность фрагмента не может превышать 55 секунд")
 
 def validate_audio_duration(contents: bytes, start: int, end: int):
     """
