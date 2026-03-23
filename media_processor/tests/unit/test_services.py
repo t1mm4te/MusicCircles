@@ -13,20 +13,20 @@ from app.services import trim_audio, crop_to_square, create_video_from_audio_and
 from tests.conftest import (
     create_dummy_audio,
     create_dummy_image,
-    dummy_wav_audio_bytes_10s,
-    dummy_mp3_audio_bytes_5s
+    dummy_wav_audio_bytes_80s,
+    dummy_audio_bytes_80s
 )
 
 
 # Тесты для trim_audio
 @pytest.mark.asyncio
-async def test_trim_audio_valid(dummy_wav_audio_bytes_10s):
+async def test_trim_audio_valid(dummy_wav_audio_bytes_80s):
     start_time_sec = 2
     end_time_sec = 5
     expected_duration_ms = (end_time_sec - start_time_sec) * 1000
 
     trimmed_buffer = await trim_audio(
-        dummy_wav_audio_bytes_10s,
+        dummy_wav_audio_bytes_80s,
         start_time_sec,
         end_time_sec
     )
@@ -44,14 +44,14 @@ async def test_trim_audio_valid(dummy_wav_audio_bytes_10s):
 
 # обрезка целиком (без обрезки)
 @pytest.mark.asyncio
-async def test_trim_audio_full_length(dummy_mp3_audio_bytes_5s):
+async def test_trim_audio_full_length(dummy_audio_bytes_80s):
     audio_segment = AudioSegment.from_file(
-        io.BytesIO(dummy_mp3_audio_bytes_5s)
+        io.BytesIO(dummy_audio_bytes_80s)
     )
     original_duration_ms = len(audio_segment)
 
     trimmed_buffer = await trim_audio(
-        dummy_mp3_audio_bytes_5s, 0, int(original_duration_ms / 1000)
+        dummy_audio_bytes_80s, 0, int(original_duration_ms / 1000)
     )
     trimmed_buffer.seek(0)
 

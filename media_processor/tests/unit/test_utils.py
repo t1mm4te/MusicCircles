@@ -44,19 +44,19 @@ async def test_validate_image_content_invalid(non_image_bytes):
 # Tests for validate_audio_content
 # Проверка - загруженный файл является аудио файлом?
 @pytest.mark.asyncio
-async def test_validate_audio_content_valid_mp3(dummy_mp3_audio_bytes_5s):
+async def test_validate_audio_content_valid_mp3(dummy_audio_bytes_80s):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=dummy_mp3_audio_bytes_5s)
+    mock_file.read = AsyncMock(return_value=dummy_audio_bytes_80s)
     content = await validate_audio_content(mock_file)
-    assert content == dummy_mp3_audio_bytes_5s
+    assert content == dummy_audio_bytes_80s
 
 
 @pytest.mark.asyncio
-async def test_validate_audio_content_valid_wav(dummy_wav_audio_bytes_10s):
+async def test_validate_audio_content_valid_wav(dummy_wav_audio_bytes_80s):
     mock_file = MagicMock(spec=UploadFile)
-    mock_file.read = AsyncMock(return_value=dummy_wav_audio_bytes_10s)
+    mock_file.read = AsyncMock(return_value=dummy_wav_audio_bytes_80s)
     content = await validate_audio_content(mock_file)
-    assert content == dummy_wav_audio_bytes_10s
+    assert content == dummy_wav_audio_bytes_80s
 
 
 @pytest.mark.asyncio
@@ -70,79 +70,50 @@ async def test_validate_audio_content_invalid(non_audio_bytes):
 
 
 # Tests for validate_audio_range
-def test_validate_audio_range_valid():
-    validate_audio_range(start=0, end=10)
+@pytest.mark.parametrize("start, end", [
+    (0, 54),  # Внутри границы
+    (10, 65), # Ровно на границе
+    (0, 10),
+])
+def test_validate_audio_range_success(start, end):
+    validate_audio_range(start=start, end=end)
 
 
-def test_validate_audio_range_valid_54_seconds():
-    # Внутри границы
-    validate_audio_range(start=0, end=54)
-
-
-def test_validate_audio_range_valid_55_seconds():
-    # Ровно на границе
-    validate_audio_range(start=10, end=65)
-
-
-def test_validate_audio_range_invalid_56_seconds():
-    # Выход за границу
+@pytest.mark.parametrize("start, end, expected_error", [
+    (0, 56, "Длительность фрагмента не может превышать 55 секунд"),
+    (-1, 10, "Параметры времени не могут быть отрицательными"),
+    (0, -5, "Параметры времени не могут быть отрицательными"),
+    (10, 10, "Параметр start должен быть меньше end"),
+    (11, 10, "Параметр start должен быть меньше end")
+])
+def test_validate_audio_range_errors(start, end, expected_error):
     with pytest.raises(HTTPException) as exc_info:
-        validate_audio_range(start=0, end=56)
+        validate_audio_range(start=start, end=end)
     assert exc_info.value.status_code == 400
-    assert "Длительность фрагмента не может превышать 55 секунд" in exc_info.value.detail
-
-
-def test_validate_audio_range_start_negative():
-    with pytest.raises(HTTPException) as exc_info:
-        validate_audio_range(start=-1, end=10)
-    assert exc_info.value.status_code == 400
-    assert "Параметры времени не могут быть отрицательными" in exc_info.value.detail
-
-
-def test_validate_audio_range_end_negative():
-    with pytest.raises(HTTPException) as exc_info:
-        validate_audio_range(start=0, end=-5)
-    assert exc_info.value.status_code == 400
-    assert "Параметры времени не могут быть отрицательными" in exc_info.value.detail
-
-
-def test_validate_audio_range_start_ge_end():
-    with pytest.raises(HTTPException) as exc_info:
-        validate_audio_range(start=10, end=10)
-    assert exc_info.value.status_code == 400
-    assert "Параметр start должен быть меньше end" in exc_info.value.detail
-    with pytest.raises(HTTPException) as exc_info:
-        validate_audio_range(start=11, end=10)
-    assert exc_info.value.status_code == 400
-    assert "Параметр start должен быть меньше end" in exc_info.value.detail
+    assert expected_error in exc_info.value.detail
 
 
 # Tests for validate_audio_duration
-def test_validate_audio_duration_valid(dummy_mp3_audio_bytes_5s):
-    validate_audio_duration(dummy_mp3_audio_bytes_5s, start=1, end=4)
+@pytest.mark.parametrize("start, end", [
+    (1, 80),
+    (0, 50),
+    (15, 60),
+])
+def test_validate_audio_duration_success(dummy_audio_bytes_80s, start, end):
+    validate_audio_duration(dummy_audio_bytes_80s, start=start, end=end)
 
 
-def test_validate_audio_duration_start_exceeds(dummy_mp3_audio_bytes_5s):
+@pytest.mark.parametrize("start, end", [
+    (81, 85),
+    (70, 90),
+    (10, 100)
+])
+def test_validate_audio_duration_errors(dummy_audio_bytes_80s, start, end):
     with pytest.raises(HTTPException) as exc_info:
-        validate_audio_duration(dummy_mp3_audio_bytes_5s, start=6, end=7)
-    assert exc_info.value.status_code == 400
-
-
-def test_validate_audio_duration_exceeds_real_length(dummy_mp3_audio_bytes_80s):
-    with pytest.raises(HTTPException) as exc_info:
-        validate_audio_duration(dummy_mp3_audio_bytes_80s, start=10, end=90)
+        validate_audio_duration(dummy_audio_bytes_80s, start=start, end=end)
     assert exc_info.value.status_code == 400
     assert "не должны превышать длительность аудио" in exc_info.value.detail
-    assert "Параметры start и end не должны превышать длительность аудио" in exc_info.value.detail
     assert "(80.00 сек)" in exc_info.value.detail
-
-
-def test_validate_audio_duration_end_exceeds(dummy_mp3_audio_bytes_5s):
-    with pytest.raises(HTTPException) as exc_info:
-        validate_audio_duration(dummy_mp3_audio_bytes_5s, start=1, end=7)
-    assert exc_info.value.status_code == 400
-    assert "Параметры start и end не должны превышать длительность аудио" in exc_info.value.detail
-    assert "(5.00 сек)" in exc_info.value.detail
 
 
 def test_validate_audio_duration_bad_audio_content(non_audio_bytes):

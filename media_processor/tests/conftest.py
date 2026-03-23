@@ -84,18 +84,13 @@ def non_image_bytes() -> bytes:
 
 
 @pytest.fixture
-def dummy_mp3_audio_bytes_5s() -> bytes:
-    return create_dummy_audio(duration_ms=5000, extension="mp3").getvalue()
-
-
-@pytest.fixture
-def dummy_wav_audio_bytes_10s() -> bytes:
-    return create_dummy_audio(duration_ms=10000, extension="wav").getvalue()
-
-
-@pytest.fixture
-def dummy_mp3_audio_bytes_80s() -> bytes:
+def dummy_audio_bytes_80s() -> bytes:
     return create_dummy_audio(duration_ms=80000, extension="mp3").getvalue()
+
+
+@pytest.fixture
+def dummy_wav_audio_bytes_80s() -> bytes:
+    return create_dummy_audio(duration_ms=80000, extension="wav").getvalue()
 
 
 @pytest.fixture
