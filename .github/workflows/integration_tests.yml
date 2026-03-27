@@ -35,10 +35,11 @@ jobs:
 
       - name: Create dummy .env file
         run: |
-          echo "BOT_TOKEN=dummy_token" > .env
-          echo "AUDIO_RECEIVER_URL=http://localhost:8001" >> .env
-          echo "MEDIA_PROCESSOR_URL=http://localhost:8002" >> .env
-          echo "DATABASE_URL=http://localhost:8003" >> .env
+          echo "TB_TOKEN=dummy_token" > .env
+          echo "DOWNLOAD_FOLDER=downloads" >> .env
+          echo "AUDIO_RECEIVER_API_URL=http://localhost:8001" >> .env
+          echo "MEDIA_PROCESSOR_API_URL=http://localhost:8002" >> .env
+          echo "DATABASE_API_URL=http://localhost:8003" >> .env
 
       - name: Run Integration Tests
         run: |
