@@ -81,20 +81,15 @@ def test_crop_to_square_already_square():
     assert img.format == "PNG"
 
 
-def test_crop_to_square_landscape():
-    image_bytes_io = create_dummy_image(width=200, height=100, extension="jpeg")
-
-    cropped_buffer = crop_to_square(image_bytes_io)
-    cropped_buffer.seek(0)
-    img = Image.open(cropped_buffer)
-
-    assert img.width == 100
-    assert img.height == 100
-    assert img.format == "PNG"
-
-
-def test_crop_to_square_portrait():
-    image_bytes_io = create_dummy_image(width=100, height=200, extension="png")
+@pytest.mark.parametrize(
+    "width, height, extension",
+    [
+        (200, 100, "jpeg"),
+        (100, 200, "png"),
+    ]
+)
+def test_crop_to_square_rectangular(width, height, extension):
+    image_bytes_io = create_dummy_image(width=width, height=height, extension=extension)
 
     cropped_buffer = crop_to_square(image_bytes_io)
     cropped_buffer.seek(0)

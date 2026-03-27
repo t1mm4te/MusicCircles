@@ -75,7 +75,7 @@ async def test_validate_audio_content_invalid(non_audio_bytes):
     (10, 65), # Ровно на границе
     (0, 10),
 ])
-def test_validate_audio_range_success(start, end):
+def test_validate_audio_range_valid(start, end):
     validate_audio_range(start=start, end=end)
 
 
