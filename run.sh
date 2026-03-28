@@ -25,22 +25,38 @@ build() {
     check_command "Build"
 }
 
-# Функция: запуск unit-тестов для media_processor
-media_processor_test() {
-    echo_info "Running unit tests for media_processor..."
-    docker compose run --rm media_processor pytest tests/unit
-    check_command "Media processor unit tests"
+# Функция: запуск тестов для database сервиса
+database_test() {
+    echo_info "Running tests for database..."
+    docker compose run --rm database pytest tests/ -v
+    check_command "Database tests"
 }
 
-# Функция: запуск unit-тестов для telegram_bot
+# Функция: запуск тестов для audio_receiver
+audio_receiver_test() {
+    echo_info "Running tests for audio_receiver..."
+    docker compose run --rm audio_receiver pytest tests/ -v
+    check_command "Audio receiver tests"
+}
+
+# Функция: запуск unit-тестов для media_processor
+media_processor_test() {
+    echo_info "Running tests for media_processor..."
+    docker compose run --rm media_processor pytest tests/ -v
+    check_command "Media processor tests"
+}
+
+# Функция: запуск тестов для telegram_bot
 telegram_bot_test() {
-    echo_info "Running unit tests for telegram_bot..."
-    docker compose run --rm telegram_bot pytest tests/unit
-    check_command "Telegram bot unit tests"
+    echo_info "Running tests for telegram_bot..."
+    docker compose run --rm telegram_bot pytest tests/ -v
+    check_command "Telegram bot tests"
 }
 
 # Функция: запуск всех тестов
 test() {
+    database_test
+    audio_receiver_test
     media_processor_test
     telegram_bot_test
     echo_info "All tests completed."
@@ -75,9 +91,11 @@ help() {
     echo "Commands:"
     echo "  all         Build, test and start services (default)"
     echo "  build       Build Docker images for all services"
-    echo "  mp-test   Run unit tests for media_processor"
-    echo "  tb-test     Run unit tests for telegram_bot"
-    echo "  test        Run all tests (mp-test + tb-test)"
+    echo "  db-test     Run tests for database service"
+    echo "  ar-test     Run tests for audio_receiver"
+    echo "  mp-test     Run tests for media_processor"
+    echo "  tb-test     Run tests for telegram_bot"
+    echo "  test        Run all tests"
     echo "  start       Start all services in background"
     echo "  stop        Stop and remove all service containers"
     echo "  help        Show this help message"
@@ -85,7 +103,7 @@ help() {
     echo "Examples:"
     echo "  $0           # Build, test and start (default)"
     echo "  $0 build     # Only build images"
-    echo "  $0 test      # Only run tests"
+    echo "  $0 test      # Run all tests"
     echo "  $0 start     # Only start services"
     echo "  $0 stop      # Stop services"
 }
@@ -97,6 +115,12 @@ case "${1:-all}" in
         ;;
     "build")
         build
+        ;;
+    "db-test")
+        database_test
+        ;;
+    "ar-test")
+        audio_receiver_test
         ;;
     "mp-test")
         media_processor_test
