@@ -177,7 +177,7 @@ async def save_audio(
 
     # Настройки по умолчанию, после вынести в отдельный метод.
     user_data[st.DURATION_LEFT_BORDER] = str(0)
-    user_data[st.DURATION_RIGHT_BORDER] = str(min(60, file_duration))
+    user_data[st.DURATION_RIGHT_BORDER] = str(min(55, file_duration))
 
     keyboard = get_main_menu(context)
 
@@ -288,7 +288,7 @@ async def save_selected_audio(
     user_data[st.TRACK_ID] = track_id
     user_data[st.FILE_DURATION] = str(duration)
     user_data[st.DURATION_LEFT_BORDER] = str(0)
-    user_data[st.DURATION_RIGHT_BORDER] = str(min(60, duration))
+    user_data[st.DURATION_RIGHT_BORDER] = str(min(55, duration))
 
     keyboard = get_main_menu(context)
 
@@ -377,7 +377,7 @@ async def set_start_time(
 
     context.user_data[st.DURATION_LEFT_BORDER] = str(0)
     context.user_data[st.DURATION_RIGHT_BORDER] = str(
-        min(60, int(context.user_data[st.FILE_DURATION])))
+        min(55, int(context.user_data[st.FILE_DURATION])))
 
     keyboard = get_main_menu(context)
 
@@ -435,7 +435,7 @@ async def set_custom_time(
         user_data[st.DURATION_RIGHT_BORDER] = str(time_codes[1])
     else:
         user_data[st.DURATION_RIGHT_BORDER] = str(
-            min(time_codes[0] + 60, int(user_data[st.FILE_DURATION])))
+            min(time_codes[0] + 55, int(user_data[st.FILE_DURATION])))
 
     keyboard = get_main_menu(context)
 
