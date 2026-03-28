@@ -1,221 +1,362 @@
 import os
 import pytest
 import httpx
-import tempfile
 from unittest.mock import patch, AsyncMock, MagicMock
+from telegram.ext import ConversationHandler
+import tempfile
 
-from src.api_utils import (
-    search_for_tracks,
-    download_track_stream,
-    trim_audio,
-    create_video,
-    TrackInfo
+import src.states as st
+import src.config as conf
+from src.api_utils import TrackInfo
+from src.handlers import (
+    search_audio_by_name,
+    save_selected_audio,
+    set_custom_time,
+    create_video_message,
+    restart_conversation
 )
-from src.database_utils import log_interaction
+
+
+def get_mock_update_message(text="test query"):
+    update = MagicMock()
+    update.message = AsyncMock()
+    update.message.text = text
+    update.message.from_user.id = 123
+    update.message.from_user.username = "test_user"
+    update.message.reply_text = AsyncMock()
+    return update
+
+
+def get_mock_update_callback_query(data="1"):
+    update = MagicMock()
+    update.callback_query = AsyncMock()
+    update.callback_query.data = data
+    update.callback_query.from_user.id = 123
+    update.callback_query.from_user.username = "test_user"
+    update.callback_query.answer = AsyncMock()
+    update.callback_query.edit_message_text = AsyncMock()
+    update.effective_chat = MagicMock()
+    update.effective_chat.id = 456
+    return update
+
+
+def get_mock_context():
+    context = MagicMock()
+    context.user_data = {}
+    context.bot = AsyncMock()
+    return context
 
 
 @pytest.mark.asyncio
-async def test_search_song_integration():
-    """Сценарий 1: Успешный GET /search к audio_receiver."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
+async def test_scenario_1_successful_search_audio():
+    """Сценарий 1. Успешный поиск аудиозаписи. Бот выдает варианты."""
+    update = get_mock_update_message("Oasis Wonderwall")
+    context = get_mock_context()
+
+    mock_db_response = MagicMock()
+    mock_db_response.raise_for_status = MagicMock()
+
+    mock_search_response = MagicMock()
+    mock_search_response.json.return_value = {
         "results": [
-            {"id": "1", "title": "Test Song", "artists": [
-                "Test Artist"], "duration": 180000, "url": "http://test"}
+            {"id": "1", "title": "Wonderwall", "artists": [
+                "Oasis"], "duration": 258000, "url": "http://test"}
         ]
     }
+    mock_search_response.raise_for_status = MagicMock()
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = mock_response
+    with patch("src.database_utils.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
+            patch("src.api_utils.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
 
-        result = await search_for_tracks("Test query")
+        mock_post.return_value = mock_db_response
+        mock_get.return_value = mock_search_response
 
-        assert result is not None
-        assert len(result) == 1
-        assert isinstance(result[0], TrackInfo)
-        assert result[0].title == "Test Song"
+        result = await search_audio_by_name(update, context)
+
+        assert result == st.SELECTING_SONG
+        update.message.reply_text.assert_called_once()
+        args, kwargs = update.message.reply_text.call_args
+        assert "Wonderwall" in args[0]
+        assert "reply_markup" in kwargs
 
 
 @pytest.mark.asyncio
-async def test_search_song_empty_or_error():
-    """Сценарий 2: Ошибка при GET /search к audio_receiver."""
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+async def test_scenario_2_empty_search():
+    """Сценарий 2. Поиск песни с пустым результатом (ничего не найдено)."""
+    update = get_mock_update_message("Unexistent_Song_123")
+    context = get_mock_context()
+
+    mock_search_response = MagicMock()
+    mock_search_response.json.return_value = {"results": []}
+    mock_search_response.raise_for_status = MagicMock()
+
+    with patch("src.database_utils.httpx.AsyncClient.post", new_callable=AsyncMock), \
+            patch("src.api_utils.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+
+        mock_get.return_value = mock_search_response
+
+        result = await search_audio_by_name(update, context)
+
+        # Стейт не меняется (возвращается None)
+        assert result is None
+        # Проверяем текст сообщения
+        update.message.reply_text.assert_called_with(
+            'Ничего не получилось найти. Попробуйте написать еще раз.'
+        )
+
+
+@pytest.mark.asyncio
+async def test_scenario_3_search_service_crash():
+    """Сценарий 3. Отказоустойчивость при падении микросервиса поиска (Graceful Degradation)."""
+    update = get_mock_update_message("Another Track")
+    context = get_mock_context()
+
+    with patch("src.database_utils.httpx.AsyncClient.post", new_callable=AsyncMock), \
+            patch("src.api_utils.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+
+        # Эмулируем 500 ошибку сервера при поиске
         mock_get.side_effect = httpx.HTTPStatusError(
             "500 Server Error", request=MagicMock(), response=MagicMock())
 
-        result = await search_for_tracks("Test query")
+        result = await search_audio_by_name(update, context)
 
-        # Функция должна перехватить ошибку и вернуть None или пустой список
-        assert result is None or result == []
+        # Проверяем, что мок был вызван
+        mock_get.assert_called_once()
 
-
-@pytest.mark.asyncio
-async def test_download_stream_chunks():
-    """Сценарий 3: Тестирование склеивания бинарных чанков (download_track_stream)."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        expected_output_path = os.path.join(temp_dir, "test_track.mp3")
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.raise_for_status = MagicMock()
-        # Мокируем асинхронный итератор aiter_bytes
-
-        async def mock_aiter_bytes():
-            yield b"chunk1"
-            yield b"chunk2"
-        mock_response.aiter_bytes = mock_aiter_bytes
-
-        mock_context_manager = MagicMock()
-        mock_context_manager.__aenter__.return_value = mock_response
-        mock_context_manager.__aexit__ = AsyncMock()
-
-        with patch("httpx.AsyncClient.stream", return_value=mock_context_manager):
-            result_path = await download_track_stream("test_track", temp_dir)
-
-            assert result_path == expected_output_path
-            assert os.path.exists(result_path)
-            with open(result_path, "rb") as f:
-                content = f.read()
-            assert content == b"chunk1chunk2"
+        # Стейт не меняется, приложение не крашится
+        assert result is None
+        update.message.reply_text.assert_called_with(
+            'Произошла ошибка. Попробуйте еще раз позже.'
+        )
 
 
 @pytest.mark.asyncio
-async def test_trim_audio_valid_limits():
-    """Сценарий 4: Успешный POST /trim_audio в media_processor."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        input_path = os.path.join(temp_dir, "input.mp3")
-        output_path = os.path.join(temp_dir, "output.mp3")
-        with open(input_path, "wb") as f:
-            f.write(b"dummy")
+async def test_scenario_4_select_song_menu():
+    """Сценарий 4. Выбор песни из списка и формирование стартового меню."""
+    update = get_mock_update_callback_query(data="track_123")
+    context = get_mock_context()
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.content = b"trimmed_audio"
+    mock_track_info_response = MagicMock()
+    mock_track_info_response.json.return_value = {
+        "duration": 180000}  # 180 сек
+    mock_track_info_response.raise_for_status = MagicMock()
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
+    with patch("src.api_utils.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_track_info_response
 
-            result = await trim_audio(input_path, 0, 30, output_path)
+        result = await save_selected_audio(update, context)
 
-            assert result is True
-            assert os.path.exists(output_path)
-            with open(output_path, "rb") as f:
-                assert f.read() == b"trimmed_audio"
+        assert result == ConversationHandler.END
+        # Данные сохранились в память сессии
+        assert context.user_data[st.TRACK_ID] == "track_123"
+        assert context.user_data[st.FILE_DURATION] == "180"
+        assert context.user_data[st.DURATION_LEFT_BORDER] == "0"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"
 
-
-@pytest.mark.asyncio
-async def test_trim_audio_boundary_exceeded():
-    """Сценарий 5: Невалидные параметры обрезки (>55 сек)."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        input_path = os.path.join(temp_dir, "input.mp3")
-        output_path = os.path.join(temp_dir, "output.mp3")
-        with open(input_path, "wb") as f:
-            f.write(b"dummy")
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.side_effect = httpx.HTTPStatusError(
-                "400 Bad Request", request=MagicMock(), response=MagicMock())
-
-            result = await trim_audio(input_path, 0, 60, output_path)
-
-            assert result is False
-            assert not os.path.exists(output_path)
+        # Обновился текст сообщения
+        update.callback_query.edit_message_text.assert_called_once()
+        args, kwargs = update.callback_query.edit_message_text.call_args
+        assert "Выберите опцию:" in args[0]
+        assert "reply_markup" in kwargs
 
 
 @pytest.mark.asyncio
-async def test_create_video_render_success():
-    """Сценарий 6: Успешный POST /create_video в media_processor."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        audio_path = os.path.join(temp_dir, "audio.mp3")
-        image_path = os.path.join(temp_dir, "image.jpg")
-        output_path = os.path.join(temp_dir, "output.mp4")
+async def test_scenario_5_db_failure_isolation():
+    """Сценарий 5. Изоляция отказов базы данных (БД лежит, бот работает)."""
+    update = get_mock_update_message("Valid Track")
+    context = get_mock_context()
 
-        with open(audio_path, "wb") as f:
-            f.write(b"audio")
-        with open(image_path, "wb") as f:
-            f.write(b"image")
+    mock_search_response = MagicMock()
+    mock_search_response.json.return_value = {
+        "results": [{"id": "1", "title": "Track", "artists": ["Art"], "duration": 120000, "url": "url"}]
+    }
+    mock_search_response.raise_for_status = MagicMock()
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.content = b"video_data"
+    with patch("src.database_utils.httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
+            patch("src.api_utils.httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-
-            result = await create_video(audio_path, image_path, output_path)
-
-            assert result is True
-            assert os.path.exists(output_path)
-            with open(output_path, "rb") as f:
-                assert f.read() == b"video_data"
-
-
-@pytest.mark.asyncio
-async def test_create_video_invalid_media():
-    """Сценарий 7: Ошибка POST /create_video из-за невалидных медиа-файлов."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        audio_path = os.path.join(temp_dir, "audio.txt")
-        image_path = os.path.join(temp_dir, "image.txt")
-        output_path = os.path.join(temp_dir, "output.mp4")
-
-        with open(audio_path, "wb") as f:
-            f.write(b"bad")
-        with open(image_path, "wb") as f:
-            f.write(b"bad")
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.side_effect = httpx.HTTPStatusError(
-                "400 Bad Request", request=MagicMock(), response=MagicMock())
-
-            result = await create_video(audio_path, image_path, output_path)
-
-            assert result is False
-
-
-@pytest.mark.asyncio
-async def test_render_timeout_handling():
-    """Сценарий 8: Таймаут рендера видео."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        audio_path = os.path.join(temp_dir, "audio.mp3")
-        image_path = os.path.join(temp_dir, "image.jpg")
-        output_path = os.path.join(temp_dir, "output.mp4")
-
-        with open(audio_path, "wb") as f:
-            f.write(b"audio")
-        with open(image_path, "wb") as f:
-            f.write(b"image")
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.side_effect = httpx.TimeoutException("Timeout")
-
-            result = await create_video(audio_path, image_path, output_path)
-
-            assert result is False
-
-
-@pytest.mark.asyncio
-async def test_database_log_interaction():
-    """Сценарий 9: Успешный POST /log-interaction/ в базу данных."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = mock_response
-
-        result = await log_interaction(user_id=123, username="test_user", interaction_type="search")
-
-        assert result is True
-        mock_post.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_database_network_failure():
-    """Сценарий 10: Сеть недоступна при обращении к БД (fail-safe)."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        # БД падает по таймауту
         mock_post.side_effect = httpx.RequestError("Connection refused")
+        mock_get.return_value = mock_search_response
 
-        result = await log_interaction(user_id=123, username="test_user", interaction_type="search")
+        result = await search_audio_by_name(update, context)
 
-        # Функционал бота не должен падать, возвращаем False и идем дальше
-        assert result is False
+        # Несмотря на ошибку БД, процесс идет дальше
+        assert result == st.SELECTING_SONG
+        update.message.reply_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_scenario_6_custom_timecode():
+    """Сценарий 6. Успешная установка произвольного таймкода (интеграция хендлера и валидатора)."""
+    update = get_mock_update_message("30 75")
+    context = get_mock_context()
+    context.user_data[st.FILE_DURATION] = "200"
+
+    result = await set_custom_time(update, context)
+
+    # Проверка, что распарсены и применены корректные таймкоды
+    assert result == ConversationHandler.END
+    assert context.user_data[st.DURATION_LEFT_BORDER] == "30"
+    assert context.user_data[st.DURATION_RIGHT_BORDER] == "75"
+
+    update.message.reply_text.assert_called_once()
+    assert "Возьмем аудио с 30с по 75с" in update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+@patch("src.handlers.api_utils.create_video", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.download_cover", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.trim_audio", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.download_track_stream", new_callable=AsyncMock)
+async def test_scenario_7_create_video_happy_path(mock_stream, mock_trim, mock_cover, mock_video):
+    """Сценарий 7. Интеграция цепочки микросервисов при создании видео (успешный путь)."""
+    update = get_mock_update_callback_query()
+    context = get_mock_context()
+
+    # Подготовка данных пользователя
+    context.user_data = {
+        st.TRACK_ID: "123",
+        st.DURATION_LEFT_BORDER: "0",
+        st.DURATION_RIGHT_BORDER: "60",
+        st.FILE_DURATION: "180"
+    }
+
+    # Мокаем успешное выполнение всех этапов
+    mock_stream.return_value = "/tmp/audio.mp3"
+    mock_trim.return_value = True
+    mock_cover.return_value = "/tmp/cover.jpg"
+    mock_video.return_value = True
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        mock_stream.return_value = os.path.join(temp_dir, "audio.mp3")
+        mock_cover.return_value = os.path.join(temp_dir, "cover.jpg")
+
+        with patch("src.handlers.conf.DOWNLOAD_FOLDER", temp_dir), \
+                patch("src.handlers.db_utils.log_interaction", new_callable=AsyncMock):
+
+            video_filename = f"video_123.mp4"
+            video_file_path = os.path.join(temp_dir, video_filename)
+            with open(video_file_path, "wb") as f:
+                f.write(b"dummy video data")
+
+            # Эмулируем функцию send_video_note от телеграма
+            context.bot.send_video_note = AsyncMock()
+
+            result = await create_video_message(update, context)
+
+        # Вызовы прошли по цепочке успешно
+        mock_stream.assert_called_once()
+        mock_trim.assert_called_once()
+        mock_cover.assert_called_once()
+        mock_video.assert_called_once()
+        context.bot.send_video_note.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("src.handlers.api_utils.create_video", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.download_cover", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.trim_audio", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.download_track_stream", new_callable=AsyncMock)
+async def test_scenario_8_trim_failure(mock_stream, mock_trim, mock_cover, mock_video):
+    """Сценарий 8. Сбой на этапе обрезки аудио (прерывание цепочки)."""
+    update = get_mock_update_callback_query()
+    context = get_mock_context()
+
+    context.user_data = {
+        st.TRACK_ID: "123",
+        st.DURATION_LEFT_BORDER: "100",  # Неверные таймкоды
+        st.DURATION_RIGHT_BORDER: "50",
+    }
+
+    mock_stream.return_value = "/tmp/audio.mp3"
+    # Сбой при выполнении запроса к media_processor
+    mock_trim.return_value = False
+
+    with patch("src.handlers.conf.DOWNLOAD_FOLDER", "/tmp"), \
+            patch("src.handlers.db_utils.log_interaction", new_callable=AsyncMock):
+
+        result = await create_video_message(update, context)
+
+        # Обложка не качается, видео не рендерится
+        mock_stream.assert_called_once()
+        mock_trim.assert_called_once()
+        mock_cover.assert_not_called()
+        mock_video.assert_not_called()
+
+        assert result == ConversationHandler.END
+        # Пользователю отправлена ошибка
+        kwargs = update.callback_query.edit_message_text.call_args.kwargs
+        args = update.callback_query.edit_message_text.call_args.args
+        called_text = kwargs.get('text', args[0] if args else '')
+        assert "Ошибка, при создании кружка" in called_text
+
+
+@pytest.mark.asyncio
+@patch("src.handlers.api_utils.create_video", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.download_cover", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.trim_audio", new_callable=AsyncMock)
+@patch("src.handlers.api_utils.download_track_stream", new_callable=AsyncMock)
+async def test_scenario_9_cover_fallback(mock_stream, mock_trim, mock_cover, mock_video):
+    """Сценарий 9. Использование локального фолбека при недоступности обложки аудио."""
+    update = get_mock_update_callback_query()
+    context = get_mock_context()
+
+    context.user_data = {
+        st.TRACK_ID: "123",
+        st.DURATION_LEFT_BORDER: "0",
+        st.DURATION_RIGHT_BORDER: "60",
+    }
+
+    mock_stream.return_value = "/tmp/audio.mp3"
+    mock_trim.return_value = True
+    # Скачивание обложки возвращает пустую строку (отказ сервиса)
+    mock_cover.return_value = ""
+    mock_video.return_value = True
+
+    with patch("src.handlers.conf.DOWNLOAD_FOLDER", "/tmp"), \
+            patch("src.handlers.db_utils.log_interaction", new_callable=AsyncMock):
+
+        context.bot.send_video_note = AsyncMock()
+        await create_video_message(update, context)
+
+        # Процесс дошел до конца
+        mock_video.assert_called_once()
+
+        # Проверяем, что в create_video был передан дефолтный путь
+        args, kwargs = mock_video.call_args
+        if "image_path" in kwargs:
+            assert kwargs["image_path"] == "video_note_images/vinyl_default.jpg"
+        else:
+            assert args[1] == "video_note_images/vinyl_default.jpg"
+
+
+@pytest.mark.asyncio
+async def test_scenario_10_restart_conversation_fallback():
+    """Сценарий 10. Перезапуск процесса через /newsong (сброс памяти и стейта)."""
+    update = get_mock_update_message("/newsong")
+    context = get_mock_context()
+
+    # Имитируем, что у пользователя заполнена сессия
+    context.user_data = {
+        st.TRACK_ID: "555",
+        st.DURATION_LEFT_BORDER: "10",
+        st.DURATION_RIGHT_BORDER: "20"
+    }
+
+    # В хендлере restart_conversation вызывается clear_user_data
+    with patch('src.handlers.clear_user_data') as mock_clear:
+        mock_clear.side_effect = lambda u, c: c.user_data.clear()
+
+        result = await restart_conversation(update, context)
+
+        # Проверяем, что стейт вернулся на старт
+        assert result == st.TYPING_SONG_NAME
+
+        # Память гарантированно очищена функциями очистки
+        mock_clear.assert_called_once_with(update, context)
+        assert len(context.user_data) == 0
+
+        # Пользователю предложено ввести новую песню
+        update.message.reply_text.assert_called_with(
+            'Введите название песни для поиска:')
