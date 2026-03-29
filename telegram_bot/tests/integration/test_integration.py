@@ -590,7 +590,9 @@ async def test_scenario_10_restart_conversation_fallback():
 
     # В хендлере restart_conversation вызывается clear_user_data
     with patch('src.handlers.clear_user_data') as mock_clear:
-        mock_clear.side_effect = lambda u, c: c.user_data.clear()
+        mock_clear.side_effect = (
+            lambda update, context: context.user_data.clear()
+        )
 
         result = await restart_conversation(update, context)
 
@@ -609,5 +611,3 @@ async def test_scenario_10_restart_conversation_fallback():
         # а не callback.
         assert update.callback_query.answer.call_count == 0
         assert update.callback_query.edit_message_text.call_count == 0
-
-
