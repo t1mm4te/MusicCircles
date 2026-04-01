@@ -17,6 +17,9 @@ import src.database_utils as db_utils
 logger = logging.getLogger(__name__)
 
 
+MAX_VIDEO_NOTE_DURATION_SECONDS = 55
+
+
 async def start(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE
@@ -177,7 +180,9 @@ async def save_audio(
 
     # Настройки по умолчанию, после вынести в отдельный метод.
     user_data[st.DURATION_LEFT_BORDER] = str(0)
-    user_data[st.DURATION_RIGHT_BORDER] = str(min(60, file_duration))
+    user_data[st.DURATION_RIGHT_BORDER] = str(
+        min(MAX_VIDEO_NOTE_DURATION_SECONDS, file_duration)
+    )
 
     keyboard = get_main_menu(context)
 
@@ -288,7 +293,9 @@ async def save_selected_audio(
     user_data[st.TRACK_ID] = track_id
     user_data[st.FILE_DURATION] = str(duration)
     user_data[st.DURATION_LEFT_BORDER] = str(0)
-    user_data[st.DURATION_RIGHT_BORDER] = str(min(60, duration))
+    user_data[st.DURATION_RIGHT_BORDER] = str(
+        min(MAX_VIDEO_NOTE_DURATION_SECONDS, duration)
+    )
 
     keyboard = get_main_menu(context)
 
@@ -352,7 +359,8 @@ async def print_time_codes(
     await query.edit_message_text(
         f'Теперь давай обрежем твой аудиофайл как надо!\n'
         f'Его длительность {audio_duration}с. '
-        'Максимальная длина кружочка - 1 минута. '
+        'Максимальная длина кружочка - '
+        f'{MAX_VIDEO_NOTE_DURATION_SECONDS} секунд. '
         'Можем начать с начала или выбрать особый отрезок песни.',
         reply_markup=reply_markup
     )
@@ -377,7 +385,11 @@ async def set_start_time(
 
     context.user_data[st.DURATION_LEFT_BORDER] = str(0)
     context.user_data[st.DURATION_RIGHT_BORDER] = str(
-        min(60, int(context.user_data[st.FILE_DURATION])))
+        min(
+            MAX_VIDEO_NOTE_DURATION_SECONDS,
+            int(context.user_data[st.FILE_DURATION])
+        )
+    )
 
     keyboard = get_main_menu(context)
 
@@ -414,7 +426,7 @@ async def print_custom_time_text(
 async def set_custom_time(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE
-) -> int:
+) -> int | str:
     """
     Принимает сообщение с указанием времени, запоминает его и возвращает меню.
     """
@@ -422,20 +434,67 @@ async def set_custom_time(
     assert update.message.text is not None
 
     text = update.message.text
-    time_codes = tuple(map(get_seconds, text.split()))
+    time_values = text.split()
+
+    if len(time_values) not in (1, 2):
+        await update.message.reply_text(
+            'Ошибка в формате времени. '
+            'Укажите время в виде "мм:сс" или "мм:сс мм:сс".'
+        )
+        return st.INPUT_TIME_CODE
+
+    try:
+        time_codes = tuple(map(get_seconds, time_values))
+    except ValueError:
+        await update.message.reply_text(
+            'Ошибка в формате времени. '
+            'Укажите время в виде "мм:сс" или "мм:сс мм:сс".'
+        )
+        return st.INPUT_TIME_CODE
 
     assert context.user_data is not None
 
     user_data = context.user_data
 
-    user_data[st.DURATION_LEFT_BORDER] = str(
-        time_codes[0])  # добавить обработчик значений
+    file_duration = int(user_data[st.FILE_DURATION])
+    left_border = time_codes[0]
 
     if len(time_codes) == 2:
-        user_data[st.DURATION_RIGHT_BORDER] = str(time_codes[1])
+        right_border = time_codes[1]
     else:
-        user_data[st.DURATION_RIGHT_BORDER] = str(
-            min(time_codes[0] + 60, int(user_data[st.FILE_DURATION])))
+        right_border = min(
+            left_border + MAX_VIDEO_NOTE_DURATION_SECONDS,
+            file_duration
+        )
+
+    if left_border < 0 or right_border < 0:
+        await update.message.reply_text(
+            'Ошибка валидации времени. Значения должны быть положительными.'
+        )
+        return st.INPUT_TIME_CODE
+
+    if left_border >= right_border:
+        await update.message.reply_text(
+            'Ошибка валидации времени. '
+            'Начало интервала должно быть меньше конца.'
+        )
+        return st.INPUT_TIME_CODE
+
+    if right_border > file_duration:
+        await update.message.reply_text(
+            'Ошибка валидации времени. Интервал выходит за пределы трека.'
+        )
+        return st.INPUT_TIME_CODE
+
+    if right_border - left_border > MAX_VIDEO_NOTE_DURATION_SECONDS:
+        await update.message.reply_text(
+            'Ошибка валидации времени. Длина интервала не должна превышать '
+            f'{MAX_VIDEO_NOTE_DURATION_SECONDS} секунд.'
+        )
+        return st.INPUT_TIME_CODE
+
+    user_data[st.DURATION_LEFT_BORDER] = str(left_border)
+    user_data[st.DURATION_RIGHT_BORDER] = str(right_border)
 
     keyboard = get_main_menu(context)
 

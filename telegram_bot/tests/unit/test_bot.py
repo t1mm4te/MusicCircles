@@ -210,7 +210,7 @@ class TestBotIntegration:
         assert context.user_data[st.TRACK_ID] == "123"
         assert context.user_data[st.FILE_DURATION] == "180"
         assert context.user_data[st.DURATION_LEFT_BORDER] == "0"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "55"
 
         update.callback_query.edit_message_text.assert_called_once()
 
@@ -260,7 +260,7 @@ class TestBotIntegration:
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.DURATION_LEFT_BORDER] == "0"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "55"
 
         update.callback_query.edit_message_text.assert_called_once()
 
@@ -278,7 +278,7 @@ class TestBotIntegration:
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.DURATION_LEFT_BORDER] == "30"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "90"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "85"
 
         update.message.reply_text.assert_called_once()
 
@@ -287,7 +287,7 @@ class TestBotIntegration:
         """Тест установки пользовательского времени (два значения)."""
 
         update = mock_update_with_text
-        update.message.text = "30 90"
+        update.message.text = "30 80"
         context = mock_context
         context.user_data[st.FILE_DURATION] = "120"
 
@@ -296,7 +296,7 @@ class TestBotIntegration:
         from telegram.ext import ConversationHandler
         assert result == ConversationHandler.END
         assert context.user_data[st.DURATION_LEFT_BORDER] == "30"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "90"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "80"
 
         update.message.reply_text.assert_called_once()
 

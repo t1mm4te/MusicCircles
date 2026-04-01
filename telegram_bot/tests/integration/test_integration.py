@@ -251,7 +251,7 @@ async def test_scenario_4_select_song_menu():
         assert context.user_data[st.TRACK_ID] == "track_123"
         assert context.user_data[st.FILE_DURATION] == "180"
         assert context.user_data[st.DURATION_LEFT_BORDER] == "0"
-        assert context.user_data[st.DURATION_RIGHT_BORDER] == "60"
+        assert context.user_data[st.DURATION_RIGHT_BORDER] == "55"
 
         # Обновился текст сообщения
         update.callback_query.edit_message_text.assert_called_once()
