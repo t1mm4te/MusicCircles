@@ -93,6 +93,7 @@ class TestSearchForTracks:
 
         result = await search_for_tracks('test')
         assert result is None
+        mock_response.raise_for_status.assert_called_once()
 
     @patch('src.api_utils.httpx.AsyncClient')
     async def test_connection_error(self, mock_client_cls):
@@ -149,6 +150,7 @@ class TestGetTrackInfo:
 
         result = await get_track_info('99999')
         assert result is None
+        mock_response.raise_for_status.assert_called_once()
 
     @patch('src.api_utils.httpx.AsyncClient')
     async def test_connection_error_returns_none(self, mock_client_cls):

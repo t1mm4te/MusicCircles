@@ -73,7 +73,7 @@ async def test_validate_audio_content_invalid(non_audio_bytes):
 @pytest.mark.parametrize("start, end", [
     (0, 54),  # Внутри границы
     (10, 65), # Ровно на границе
-    (0, 10),
+    (0, 1),
 ])
 def test_validate_audio_range_valid(start, end):
     validate_audio_range(start=start, end=end)
