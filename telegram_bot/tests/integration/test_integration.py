@@ -156,7 +156,7 @@ async def test_scenario_2_empty_search():
         )
         mock_search_response.raise_for_status.assert_called_once()
 
-        # Стейт не меняется (возвращается None)
+        # Состояние не меняется (возвращается None)
         assert result is None
         # Проверяем текст сообщения
         update.message.reply_text.assert_called_once_with(
@@ -170,7 +170,7 @@ async def test_scenario_2_empty_search():
 @pytest.mark.asyncio
 async def test_scenario_3_search_service_crash():
     """Сценарий 3. Отказоустойчивость при падении микросервиса поиска."""
-    update = get_mock_update_message("Another Track")
+    update = get_mock_update_message("Some Track")
     context = get_mock_context()
 
     mock_db_response = MagicMock()
@@ -206,11 +206,11 @@ async def test_scenario_3_search_service_crash():
 
         mock_get.assert_called_once_with(
             f"{conf.AUDIO_RECEIVER_API_URL}/search/",
-            params={"query": "Another Track"},
+            params={"query": "Some Track"},
             timeout=10.0
         )
 
-        # Стейт не меняется, приложение не крашится
+        # Состояние не меняется, приложение не крашится
         assert result is None
         update.message.reply_text.assert_called_once_with(
             'Произошла ошибка. Попробуйте еще раз позже.'
@@ -577,7 +577,9 @@ async def test_scenario_9_cover_fallback(mock_stream, mock_trim, mock_cover,
 
 @pytest.mark.asyncio
 async def test_scenario_10_restart_conversation_fallback():
-    """Сценарий 10. Перезапуск процесса через /newsong (сброс памяти и стейта)."""
+    """
+    Сценарий 10. Перезапуск процесса через /newsong (сброс памяти и состояния).
+    """
     update = get_mock_update_message("/newsong")
     context = get_mock_context()
 
@@ -596,7 +598,7 @@ async def test_scenario_10_restart_conversation_fallback():
 
         result = await restart_conversation(update, context)
 
-        # Проверяем, что стейт вернулся на старт
+        # Проверяем, что состояние вернулось на старт
         assert result == st.TYPING_SONG_NAME
 
         # Память гарантированно очищена функциями очистки
