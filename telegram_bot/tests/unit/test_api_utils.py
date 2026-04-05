@@ -53,7 +53,7 @@ class TestSearchForTracks:
             assert isinstance(result[i], TrackInfo)
             assert result[i].id == results_mock[i]['id']
             assert result[i].title == results_mock[i]['title']
-            assert result[i].artists == results_mock[i]['artists']
+            assert result[i].artists == ', '.join(results_mock[i]['artists'])
             assert result[i].duration == results_mock[i]['duration'] // 1000
 
     @patch('src.api_utils.httpx.AsyncClient')
