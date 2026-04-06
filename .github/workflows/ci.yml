@@ -69,7 +69,7 @@ jobs:
           docker compose run --rm telegram_bot pytest tests/integration -v --asyncio-mode=auto
 
   e2e-tests:
-    needs: unit-tests
+    needs: integration-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
