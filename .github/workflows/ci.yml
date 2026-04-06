@@ -9,6 +9,7 @@ on:
 env:
   TB_TOKEN: "dummy_token"
   DOWNLOAD_FOLDER: "downloads"
+  YANDEX_MUSIC_API_TOKEN: ${{ secrets.YANDEX_TOKEN }}
   AUDIO_RECEIVER_API_URL: "http://audio_receiver:9000"
   MEDIA_PROCESSOR_API_URL: "http://media_processor:8000"
   DATABASE_API_URL: "http://database:8001"
