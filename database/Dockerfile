@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Создаем директорию для данных
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 COPY requirements.txt .
 RUN pip install --upgrade pip \

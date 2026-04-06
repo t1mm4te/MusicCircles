@@ -3,34 +3,32 @@ import os
 from contextlib import contextmanager
 from typing import Generator
 
-DATABASE_PATH = "/app/data/database.db"
-
+# Приоритет переменной окружения для тестов
+DATABASE_PATH = os.getenv("DATABASE_PATH", "/app/data/database.db")
 
 def init_database():
     """Инициализация базы данных и создание таблиц."""
-    # Создаем директорию для базы данных, если она не существует
-    os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+    # Если мы не в режиме "в памяти", создаем папку
+    if DATABASE_PATH != ":memory:":
+        db_dir = os.path.dirname(DATABASE_PATH)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
 
     with sqlite3.connect(DATABASE_PATH) as conn:
         cursor = conn.cursor()
-
-        # Создание таблицы пользователей
+        # Создание таблиц
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT
             )
         """)
-
-        # Создание таблицы видов взаимодействия
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interaction_types (
                 type_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 interaction_type CHAR(30) UNIQUE NOT NULL
             )
         """)
-
-        # Создание таблицы взаимодействий
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interactions (
                 interaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,27 +39,16 @@ def init_database():
                 FOREIGN KEY (interaction_type_id) REFERENCES interaction_types (type_id)
             )
         """)
-
-        # Добавляем только два типа взаимодействий
-        default_interactions = [
-            "Поиск песни",
-            "Создание видео"
-        ]
-
-        for interaction in default_interactions:
-            cursor.execute("""
-                INSERT OR IGNORE INTO interaction_types (interaction_type) 
-                VALUES (?)
-            """, (interaction,))
-
+        # Наполнение справочника
+        for interaction in ["Поиск песни", "Создание видео"]:
+            cursor.execute("INSERT OR IGNORE INTO interaction_types (interaction_type) VALUES (?)", (interaction,))
         conn.commit()
-
 
 @contextmanager
 def get_db_connection() -> Generator[sqlite3.Connection, None, None]:
     """Контекстный менеджер для работы с базой данных."""
     conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row  # Для возврата результатов как словарей
+    conn.row_factory = sqlite3.Row
     try:
         yield conn
     finally:

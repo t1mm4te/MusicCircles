@@ -1,0 +1,62 @@
+name: MusicCircles CI Suite
+
+on:
+  push:
+    branches: [ main, 'feature/*' ]
+  pull_request:
+    branches: [ main, 'feature/*' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker images
+        run: docker compose build
+
+  unit-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [database, audio_receiver, media_processor, telegram_bot]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Unit Tests for ${{ matrix.service }}
+        run: |
+          # Используем :memory: для базы, чтобы не плодить файлы
+          docker compose run --rm -e DATABASE_PATH=":memory:" ${{ matrix.service }} pytest tests/unit -v
+
+  integration-tests:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start Infrastructure
+        run: |
+          docker compose up -d database audio_receiver media_processor
+          sleep 10 # Ожидание инициализации
+      
+      - name: Run Integration Tests (Bot -> Services)
+        run: |
+          docker compose run --rm telegram_bot pytest tests/integration -v --asyncio-mode=auto
+
+  e2e-tests:
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full System Launch
+        run: |
+          docker compose up -d
+          sleep 15
+          
+      - name: Run E2E Scenarios
+        run: |
+          # Здесь запускаются тесты, которые проверяют цепочку: 
+          # Запрос в бота -> Обработка -> Ответ
+          docker compose run --rm telegram_bot pytest tests/e2e -v
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
