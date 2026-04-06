@@ -7,8 +7,8 @@ on:
     branches: [ main, 'feature/*' ]
 
 env:
-  TB_TOKEN: "7731876932:AAGDmpEAtalDXeZMS-U9MBMj0Fy88tKQJpM"
-  YANDEX_MUSIC_API_TOKEN: "y0_AgAAAABZWKDwAAG8XgAAAAEQqLLWAAA5EIagbPJG97UdQ06JKoMin_vpvA"
+  TB_TOKEN: ${{ secrets.TB_TOKEN }}
+  YANDEX_MUSIC_API_TOKEN: ${{ secrets.YANDEX_MUSIC_API_TOKEN }}
   DOWNLOAD_FOLDER: "downloads"
   AUDIO_RECEIVER_API_URL: "http://audio_receiver:9000"
   MEDIA_PROCESSOR_API_URL: "http://media_processor:8000"
