@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create dummy .env for docker-compose validation
+      - name: Create empty .env for validation
         run: touch .env
       - name: Build Docker images
         run: docker compose build
@@ -34,12 +34,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Create dummy .env
-        run: touch .env
+        run: |
+          echo "TB_TOKEN=dummy" > .env
+          echo "YANDEX_MUSIC_API_TOKEN=dummy" >> .env
+          echo "DOWNLOAD_FOLDER=downloads" >> .env
+          echo "AUDIO_RECEIVER_API_URL=http://localhost" >> .env
+          echo "MEDIA_PROCESSOR_API_URL=http://localhost" >> .env
+          echo "DATABASE_API_URL=http://localhost" >> .env
       - name: Run Unit Tests
         run: |
           docker compose run --rm \
-            -e YANDEX_MUSIC_API_TOKEN="dummy" \
-            -e TB_TOKEN="dummy" \
             -e DATABASE_PATH=":memory:" \
             ${{ matrix.service }} pytest tests/unit -v
 
@@ -52,6 +56,7 @@ jobs:
         run: |
           echo "TB_TOKEN=${{ env.TB_TOKEN }}" > .env
           echo "YANDEX_MUSIC_API_TOKEN=${{ env.YANDEX_MUSIC_API_TOKEN }}" >> .env
+          echo "DOWNLOAD_FOLDER=${{ env.DOWNLOAD_FOLDER }}" >> .env
           echo "AUDIO_RECEIVER_API_URL=${{ env.AUDIO_RECEIVER_API_URL }}" >> .env
           echo "MEDIA_PROCESSOR_API_URL=${{ env.MEDIA_PROCESSOR_API_URL }}" >> .env
           echo "DATABASE_API_URL=${{ env.DATABASE_API_URL }}" >> .env
@@ -61,9 +66,7 @@ jobs:
           sleep 15
       - name: Run Integration Tests
         run: |
-          docker compose run --rm \
-            -e TB_TOKEN="${{ env.TB_TOKEN }}" \
-            telegram_bot pytest tests/integration -v --asyncio-mode=auto
+          docker compose run --rm telegram_bot pytest tests/integration -v --asyncio-mode=auto
 
   e2e-tests:
     needs: integration-tests
@@ -74,19 +77,28 @@ jobs:
         run: |
           echo "TB_TOKEN=${{ env.TB_TOKEN }}" > .env
           echo "YANDEX_MUSIC_API_TOKEN=${{ env.YANDEX_MUSIC_API_TOKEN }}" >> .env
+          echo "DOWNLOAD_FOLDER=${{ env.DOWNLOAD_FOLDER }}" >> .env
           echo "AUDIO_RECEIVER_API_URL=${{ env.AUDIO_RECEIVER_API_URL }}" >> .env
           echo "MEDIA_PROCESSOR_API_URL=${{ env.MEDIA_PROCESSOR_API_URL }}" >> .env
           echo "DATABASE_API_URL=${{ env.DATABASE_API_URL }}" >> .env
+      
       - name: Full System Launch
         run: |
-          docker compose up -d
+          docker compose up -d --force-recreate
           sleep 20
+          docker compose ps
+      
       - name: Run E2E Scenarios
         run: |
           docker compose run --rm \
             -e TB_TOKEN="${{ env.TB_TOKEN }}" \
             -e YANDEX_MUSIC_API_TOKEN="${{ env.YANDEX_MUSIC_API_TOKEN }}" \
+            -e DOWNLOAD_FOLDER="${{ env.DOWNLOAD_FOLDER }}" \
+            -e AUDIO_RECEIVER_API_URL="${{ env.AUDIO_RECEIVER_API_URL }}" \
+            -e MEDIA_PROCESSOR_API_URL="${{ env.MEDIA_PROCESSOR_API_URL }}" \
+            -e DATABASE_API_URL="${{ env.DATABASE_API_URL }}" \
             telegram_bot pytest tests/e2e -v
+      
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs
