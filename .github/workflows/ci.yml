@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [ main, 'feature/*' ]
 
+env:
+  TB_TOKEN: "dummy_token"
+  DOWNLOAD_FOLDER: "downloads"
+  AUDIO_RECEIVER_API_URL: "http://audio_receiver:9000"
+  MEDIA_PROCESSOR_API_URL: "http://media_processor:8000"
+  DATABASE_API_URL: "http://database:8001"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,41 +30,52 @@ jobs:
         service: [database, audio_receiver, media_processor, telegram_bot]
     steps:
       - uses: actions/checkout@v4
-      - name: Run Unit Tests for ${{ matrix.service }}
+      # Создаем .env для юнитов (если код внутри требует его наличия)
+      - name: Create .env
         run: |
-          # Используем :memory: для базы, чтобы не плодить файлы
-          docker compose run --rm -e DATABASE_PATH=":memory:" ${{ matrix.service }} pytest tests/unit -v
+          echo "TB_TOKEN=${{ env.TB_TOKEN }}" > .env
+          echo "YANDEX_MUSIC_API_TOKEN=${{ env.YANDEX_MUSIC_API_TOKEN }}" >> .env
+          echo "DATABASE_PATH=:memory:" >> .env
+      - name: Run Unit Tests for ${{ matrix.service }}
+        run: docker compose run --rm ${{ matrix.service }} pytest tests/unit -v
 
   integration-tests:
     needs: unit-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Create .env
+        run: |
+          echo "TB_TOKEN=${{ env.TB_TOKEN }}" > .env
+          echo "YANDEX_MUSIC_API_TOKEN=${{ env.YANDEX_MUSIC_API_TOKEN }}" >> .env
+          echo "AUDIO_RECEIVER_API_URL=${{ env.AUDIO_RECEIVER_API_URL }}" >> .env
+          echo "MEDIA_PROCESSOR_API_URL=${{ env.MEDIA_PROCESSOR_API_URL }}" >> .env
+          echo "DATABASE_API_URL=${{ env.DATABASE_API_URL }}" >> .env
       - name: Start Infrastructure
         run: |
           docker compose up -d database audio_receiver media_processor
-          sleep 10 # Ожидание инициализации
-      
-      - name: Run Integration Tests (Bot -> Services)
-        run: |
-          docker compose run --rm telegram_bot pytest tests/integration -v --asyncio-mode=auto
+          sleep 10
+      - name: Run Integration Tests
+        run: docker compose run --rm telegram_bot pytest tests/integration -v --asyncio-mode=auto
 
   e2e-tests:
     needs: integration-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Create .env
+        run: |
+          echo "TB_TOKEN=${{ env.TB_TOKEN }}" > .env
+          echo "YANDEX_MUSIC_API_TOKEN=${{ env.YANDEX_MUSIC_API_TOKEN }}" >> .env
+          echo "AUDIO_RECEIVER_API_URL=${{ env.AUDIO_RECEIVER_API_URL }}" >> .env
+          echo "MEDIA_PROCESSOR_API_URL=${{ env.MEDIA_PROCESSOR_API_URL }}" >> .env
+          echo "DATABASE_API_URL=${{ env.DATABASE_API_URL }}" >> .env
       - name: Full System Launch
         run: |
           docker compose up -d
           sleep 15
-          
       - name: Run E2E Scenarios
-        run: |
-          # Здесь запускаются тесты, которые проверяют цепочку: 
-          # Запрос в бота -> Обработка -> Ответ
-          docker compose run --rm telegram_bot pytest tests/e2e -v
-
+        run: docker compose run --rm telegram_bot pytest tests/e2e -v
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs
