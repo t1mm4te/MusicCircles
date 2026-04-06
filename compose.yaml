@@ -12,6 +12,8 @@ services:
       timeout: 5s      # Считать неудачей, если ответ не пришел за 5 секунд
       retries: 5       # Количество попыток перед тем, как пометить как нездоровый
       start_period: 10s # Дать 10 секунд на первоначальный запуск перед первыми проверками
+    env_file:
+      - .env
   
   media_processor:
     build: ./media_processor
@@ -19,6 +21,9 @@ services:
     container_name: processor-api
     ports:
       - "8000:8000"
+    env_file:
+      - .env
+
   
   database:
     build: ./database
@@ -34,6 +39,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    env_file:
+      - .env
   
   telegram_bot:
     build: ./telegram_bot
@@ -43,4 +50,6 @@ services:
       - audio_receiver
       - media_processor
       - database
+    env_file:
+      - .env
     

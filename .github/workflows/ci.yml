@@ -23,7 +23,7 @@ jobs:
       - name: Create dummy .env for build context
         run: |
           touch audio_receiver/.env
-          echo "YANDEX_MUSIC_API_TOKEN=dummy" > audio_receiver/.env
+          echo "YANDEX_MUSIC_API_TOKEN_DUMMY=dummy" > .env
       - name: Build Docker images
         run: docker compose build
 
