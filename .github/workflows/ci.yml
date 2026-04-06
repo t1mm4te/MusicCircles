@@ -7,7 +7,7 @@ on:
     branches: [ main, 'feature/*' ]
 
 env:
-  TB_TOKEN: "dummy_token"
+  TB_TOKEN: ${{ secrets.TB_TOKEN }}
   YANDEX_MUSIC_API_TOKEN: ${{ secrets.YANDEX_TOKEN }}
   DOWNLOAD_FOLDER: "downloads"
   AUDIO_RECEIVER_API_URL: "http://audio_receiver:9000"
