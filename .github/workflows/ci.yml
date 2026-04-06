@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Create dummy .env for docker-compose validation
+        run: touch .env
       - name: Build Docker images
         run: docker compose build
 
@@ -31,12 +33,13 @@ jobs:
         service: [database, audio_receiver, media_processor, telegram_bot]
     steps:
       - uses: actions/checkout@v4
+      - name: Create dummy .env
+        run: touch .env
       - name: Run Unit Tests
         run: |
-          # Используем -e для прямой передачи переменных в контейнер
           docker compose run --rm \
-            -e YANDEX_MUSIC_API_TOKEN="${{ env.YANDEX_MUSIC_API_TOKEN }}" \
-            -e TB_TOKEN="${{ env.TB_TOKEN }}" \
+            -e YANDEX_MUSIC_API_TOKEN="dummy" \
+            -e TB_TOKEN="dummy" \
             -e DATABASE_PATH=":memory:" \
             ${{ matrix.service }} pytest tests/unit -v
 
@@ -52,21 +55,14 @@ jobs:
           echo "AUDIO_RECEIVER_API_URL=${{ env.AUDIO_RECEIVER_API_URL }}" >> .env
           echo "MEDIA_PROCESSOR_API_URL=${{ env.MEDIA_PROCESSOR_API_URL }}" >> .env
           echo "DATABASE_API_URL=${{ env.DATABASE_API_URL }}" >> .env
-
       - name: Start Infrastructure
         run: |
-          # Поднимаем сервисы. Они подхватят .env через env_file в compose.yaml
           docker compose up -d database audio_receiver media_processor
           sleep 15
-          docker compose ps  # Проверка статуса (должны быть Up/Healthy)
-
       - name: Run Integration Tests
         run: |
           docker compose run --rm \
             -e TB_TOKEN="${{ env.TB_TOKEN }}" \
-            -e AUDIO_RECEIVER_API_URL="${{ env.AUDIO_RECEIVER_API_URL }}" \
-            -e MEDIA_PROCESSOR_API_URL="${{ env.MEDIA_PROCESSOR_API_URL }}" \
-            -e DATABASE_API_URL="${{ env.DATABASE_API_URL }}" \
             telegram_bot pytest tests/integration -v --asyncio-mode=auto
 
   e2e-tests:
@@ -81,22 +77,16 @@ jobs:
           echo "AUDIO_RECEIVER_API_URL=${{ env.AUDIO_RECEIVER_API_URL }}" >> .env
           echo "MEDIA_PROCESSOR_API_URL=${{ env.MEDIA_PROCESSOR_API_URL }}" >> .env
           echo "DATABASE_API_URL=${{ env.DATABASE_API_URL }}" >> .env
-
       - name: Full System Launch
         run: |
           docker compose up -d
           sleep 20
-
       - name: Run E2E Scenarios
         run: |
           docker compose run --rm \
             -e TB_TOKEN="${{ env.TB_TOKEN }}" \
             -e YANDEX_MUSIC_API_TOKEN="${{ env.YANDEX_MUSIC_API_TOKEN }}" \
-            -e AUDIO_RECEIVER_API_URL="${{ env.AUDIO_RECEIVER_API_URL }}" \
-            -e MEDIA_PROCESSOR_API_URL="${{ env.MEDIA_PROCESSOR_API_URL }}" \
-            -e DATABASE_API_URL="${{ env.DATABASE_API_URL }}" \
             telegram_bot pytest tests/e2e -v
-
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs
